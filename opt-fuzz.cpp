@@ -74,8 +74,8 @@ static int Choose(int n) {
 }
 
 static std::vector<Type *> ArgsTy;
-static int budget = N;
-static IRBuilder<true, NoFolder> *builder;
+static int Budget = N;
+static IRBuilder<true, NoFolder> *Builder;
 static LLVMContext *C;
 static std::vector<Value *> Vals;
 static Function::arg_iterator NextArg;
@@ -87,9 +87,9 @@ static void freshArg() {
 }
 
 static Value *getVal(bool ConstOK = true) {
-  if (budget > 0 && Choose(2)) {
+  if (Budget > 0 && Choose(2)) {
     // make a new instruction
-    --budget;
+    --Budget;
     Instruction::BinaryOps Op;
     switch (Choose(8)) {
     case 0:
@@ -120,7 +120,7 @@ static Value *getVal(bool ConstOK = true) {
     Value *L = getVal();
     bool Lconst = dyn_cast<ConstantInt>(L);
     Value *R = getVal(!Lconst);
-    Value *V = builder->CreateBinOp(Op, L, R);
+    Value *V = Builder->CreateBinOp(Op, L, R);
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
          Op == Instruction::Mul || Op == Instruction::Shl) &&
         Choose(2)) {
@@ -158,9 +158,8 @@ int main(int argc, char **argv) {
   if (OutputFilename.empty()) {
     OutputFilename = "-";
   } else {
-    if (All) {
+    if (All)
       report_fatal_error("cannot specify output file in exhaustive mode");
-    }
   }
 
   Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
@@ -171,10 +170,10 @@ int main(int argc, char **argv) {
   Function *F =
       Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);
   NextArg = F->arg_begin();
-  builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
+  Builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
 
   Value *V = getVal();
-  builder->CreateRet(V);
+  Builder->CreateRet(V);
 
   std::string ChoiceStr = "";
   for (std::vector<int>::iterator it = Choices.begin(); it != Choices.end();

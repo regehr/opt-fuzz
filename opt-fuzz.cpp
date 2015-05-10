@@ -1,4 +1,4 @@
-//===-- llvm-stress.cpp - Generate random LL files to stress-test LLVM ----===//
+//===-- opt-fuzz.cpp - Generate random LL files to stress-test LLVM ----===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -39,42 +39,83 @@ using namespace llvm;
 
 static const int W = 8; // width
 static const int N = 1; // number of instructions to generate
+static const int MaxArgs = 20;
 
 static cl::opt<std::string> OutputFilename("o",
                                            cl::desc("Override output filename"),
                                            cl::value_desc("filename"));
 
+static std::vector<int> Choices;
+
+static int Choose(int n) {
+  // return rand() % n;
+  for (int i=0; i<n; ++i) {
+    int ret = ::fork();
+    assert(ret != -1);
+    if (ret==0)
+      return i;
+  }
+  exit(0);
+}
+
 static std::vector<Type *> ArgsTy;
 static int budget = N;
-IRBuilder<true, llvm::NoFolder> *builder;
-LLVMContext *C;
-std::set<Value *> Vals;
-Function *F;
-Module *M;
+static IRBuilder<true, NoFolder> *builder;
+static LLVMContext *C;
+static std::vector<Value *> Vals;
+static Function::arg_iterator NextArg;
 
-Value *getVal() {
+static void freshArg() {
+  assert(NextArg);
+  Vals.push_back(NextArg);
+  ++NextArg;
+}
 
-  if (budget > 0) {
+static Value *getVal() {
+  switch (Choose((budget > 0) ? 3 : 2)) {
+  case 0:
+    // return a value that was already available
+    freshArg();
+    return Vals.at(Choose(Vals.size()));
+  case 1:
+    // return a constant
+    return ConstantInt::get(*C, APInt(W, Choose(1<<W)));
+  case 2: {
+    // make a new instruction
     --budget;
-    Value *V = builder->CreateAdd(getVal(), getVal());
-    Vals.insert(V);
+    Value *V;
+    switch (Choose(8)) {
+    case 0: V = builder->CreateAdd(getVal(), getVal()); break;
+    case 1: V = builder->CreateSub(getVal(), getVal()); break;
+    case 2: V = builder->CreateMul(getVal(), getVal()); break;
+    case 3: V = builder->CreateSDiv(getVal(), getVal()); break;
+    case 4: V = builder->CreateUDiv(getVal(), getVal()); break;
+    case 5: V = builder->CreateAnd(getVal(), getVal()); break;
+    case 6: V = builder->CreateOr(getVal(), getVal()); break;
+    case 7: V = builder->CreateXor(getVal(), getVal()); break;
+    }
+    Vals.push_back(V);
     return V;
   }
-
-  return ConstantInt::get(*C, APInt(W, 2));
+  default:
+    assert(0);
+  }
 }
 
 int main(int argc, char **argv) {
   srand(::time(0) + ::getpid());
-  llvm::PrettyStackTraceProgram X(argc, argv);
+  PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
 
-  std::unique_ptr<Module> Mod(new Module("/tmp/autogen.bc", getGlobalContext()));
-  M = Mod.get();
+  Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
   C = &M->getContext();
+  for (int i=0; i<MaxArgs; ++i)
+    ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
   FunctionType *FuncTy = FunctionType::get(Type::getIntNTy(*C, W), ArgsTy, 0);
-  F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);
-  builder = new IRBuilder<true, llvm::NoFolder>(BasicBlock::Create(*C, "", F));
+  Function *F =
+    Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);
+  NextArg = F->arg_begin();
+  builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
 
   Value *V = getVal();
   builder->CreateRet(V);

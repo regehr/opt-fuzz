@@ -80,12 +80,6 @@ static LLVMContext *C;
 static std::vector<Value *> Vals;
 static Function::arg_iterator NextArg;
 
-static void freshArg() {
-  assert(NextArg);
-  Vals.push_back(NextArg);
-  ++NextArg;
-}
-
 static Value *getVal(bool ConstOK = true) {
   if (Budget > 0 && Choose(2)) {
     // make a new instruction
@@ -146,7 +140,9 @@ static Value *getVal(bool ConstOK = true) {
   if (ConstOK && Choose(2))
     return ConstantInt::get(*C, APInt(W, Choose(1 << W)));
 
-  freshArg();
+  assert(NextArg);
+  Vals.push_back(NextArg);
+  ++NextArg;
   return Vals.at(Choose(Vals.size()));
 }
 

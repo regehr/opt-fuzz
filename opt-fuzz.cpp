@@ -53,7 +53,7 @@ static std::vector<int> Choices;
 
 static int Choose(int n) {
   if (All) {
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < (n-1); ++i) {
       int ret = ::fork();
       assert(ret != -1);
       if (ret == 0) {
@@ -64,7 +64,8 @@ static int Choose(int n) {
         assert(ret != -1);
       }
     }
-    exit(0);
+    Choices.push_back(n - 1);
+    return n - 1;
   } else {
     int i = rand() % n;
     Choices.push_back(i);

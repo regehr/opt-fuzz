@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <sys/wait.h>
 #include <unistd.h>
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/IR/IRBuilder.h"
@@ -37,7 +38,7 @@
 #include <vector>
 using namespace llvm;
 
-static const int W = 3; // width
+static const int W = 2; // width
 static const int N = 2; // number of instructions to generate
 static const int MaxArgs = N + 2;
 
@@ -58,6 +59,9 @@ static int Choose(int n) {
       if (ret == 0) {
         Choices.push_back(i);
         return i;
+      } else {
+        ret = ::wait(0);
+        assert(ret != -1);
       }
     }
     exit(0);

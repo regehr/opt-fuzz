@@ -53,7 +53,7 @@ static std::vector<int> Choices;
 
 static int Choose(int n) {
   if (All) {
-    for (int i = 0; i < (n-1); ++i) {
+    for (int i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
       assert(ret != -1);
       if (ret == 0) {
@@ -127,17 +127,20 @@ static Value *getVal() {
     }
     Value *V = builder->CreateBinOp(Op, getVal(), getVal());
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
-         Op == Instruction::Mul || Op == Instruction::Shl) && Choose(2)) {
+         Op == Instruction::Mul || Op == Instruction::Shl) &&
+        Choose(2)) {
       BinaryOperator *B = cast<BinaryOperator>(V);
       B->setHasNoSignedWrap(true);
     }
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
-         Op == Instruction::Mul || Op == Instruction::Shl) && Choose(2)) {
+         Op == Instruction::Mul || Op == Instruction::Shl) &&
+        Choose(2)) {
       BinaryOperator *B = cast<BinaryOperator>(V);
       B->setHasNoUnsignedWrap(true);
     }
     if ((Op == Instruction::UDiv || Op == Instruction::SDiv ||
-         Op == Instruction::LShr ||Op == Instruction::AShr) && Choose(2)) {
+         Op == Instruction::LShr || Op == Instruction::AShr) &&
+        Choose(2)) {
       BinaryOperator *B = cast<BinaryOperator>(V);
       B->setIsExact(true);
     }

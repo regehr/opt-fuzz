@@ -97,32 +97,48 @@ static Value *getVal() {
   case 2: {
     // make a new instruction
     --budget;
-    Value *V;
+    Instruction::BinaryOps Op;
     switch (Choose(8)) {
     case 0:
-      V = builder->CreateAdd(getVal(), getVal());
+      Op = Instruction::Add;
       break;
     case 1:
-      V = builder->CreateSub(getVal(), getVal());
+      Op = Instruction::Sub;
       break;
     case 2:
-      V = builder->CreateMul(getVal(), getVal());
+      Op = Instruction::Mul;
       break;
     case 3:
-      V = builder->CreateSDiv(getVal(), getVal());
+      Op = Instruction::SDiv;
       break;
     case 4:
-      V = builder->CreateUDiv(getVal(), getVal());
+      Op = Instruction::UDiv;
       break;
     case 5:
-      V = builder->CreateAnd(getVal(), getVal());
+      Op = Instruction::And;
       break;
     case 6:
-      V = builder->CreateOr(getVal(), getVal());
+      Op = Instruction::Or;
       break;
     case 7:
-      V = builder->CreateXor(getVal(), getVal());
+      Op = Instruction::Xor;
       break;
+    }
+    Value *V = builder->CreateBinOp(Op, getVal(), getVal());
+    if ((Op == Instruction::Add || Op == Instruction::Sub ||
+         Op == Instruction::Mul || Op == Instruction::Shl) && Choose(2)) {
+      BinaryOperator *B = cast<BinaryOperator>(V);
+      B->setHasNoSignedWrap(true);
+    }
+    if ((Op == Instruction::Add || Op == Instruction::Sub ||
+         Op == Instruction::Mul || Op == Instruction::Shl) && Choose(2)) {
+      BinaryOperator *B = cast<BinaryOperator>(V);
+      B->setHasNoUnsignedWrap(true);
+    }
+    if ((Op == Instruction::UDiv || Op == Instruction::SDiv ||
+         Op == Instruction::LShr ||Op == Instruction::AShr) && Choose(2)) {
+      BinaryOperator *B = cast<BinaryOperator>(V);
+      B->setIsExact(true);
     }
     Vals.push_back(V);
     return V;

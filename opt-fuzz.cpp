@@ -86,16 +86,8 @@ static void freshArg() {
   ++NextArg;
 }
 
-static Value *getVal() {
-  switch (Choose((budget > 0) ? 3 : 2)) {
-  case 0:
-    // return a value that was already available
-    freshArg();
-    return Vals.at(Choose(Vals.size()));
-  case 1:
-    // return a constant
-    return ConstantInt::get(*C, APInt(W, Choose(1 << W)));
-  case 2: {
+static Value *getVal(bool ConstOK = true) {
+  if (budget > 0 && Choose(2)) {
     // make a new instruction
     --budget;
     Instruction::BinaryOps Op;
@@ -125,7 +117,10 @@ static Value *getVal() {
       Op = Instruction::Xor;
       break;
     }
-    Value *V = builder->CreateBinOp(Op, getVal(), getVal());
+    Value *L = getVal();
+    bool Lconst = dyn_cast<ConstantInt>(L);
+    Value *R = getVal(!Lconst);
+    Value *V = builder->CreateBinOp(Op, L, R);
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
          Op == Instruction::Mul || Op == Instruction::Shl) &&
         Choose(2)) {
@@ -147,9 +142,12 @@ static Value *getVal() {
     Vals.push_back(V);
     return V;
   }
-  default:
-    assert(0);
-  }
+
+  if (ConstOK && Choose(2))
+    return ConstantInt::get(*C, APInt(W, Choose(1 << W)));
+
+  freshArg();
+  return Vals.at(Choose(Vals.size()));
 }
 
 int main(int argc, char **argv) {

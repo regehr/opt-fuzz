@@ -40,7 +40,7 @@ using namespace llvm;
 
 static const int W = 2; // width
 static const int N = 2; // number of instructions to generate
-static const int MaxArgs = N + 2;
+static const int MaxArgs = N + 1;
 
 static cl::opt<std::string> OutputFilename("o",
                                            cl::desc("Override output filename"),
@@ -137,6 +137,14 @@ int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
 
+  if (OutputFilename.empty()) {
+    OutputFilename = "-";
+  } else {
+    if (All) {
+      report_fatal_error("cannot specify output file in exhaustive mode");
+    }
+  }
+
   Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
   C = &M->getContext();
   for (int i = 0; i < MaxArgs; ++i)
@@ -150,14 +158,11 @@ int main(int argc, char **argv) {
   Value *V = getVal();
   builder->CreateRet(V);
 
-  if (OutputFilename.empty())
-    OutputFilename = "-";
-
   std::string ChoiceStr = "";
   for (std::vector<int>::iterator it = Choices.begin(); it != Choices.end();
        ++it)
     ChoiceStr += std::to_string(*it) + "_";
-  ChoiceStr.erase(ChoiceStr.end()-1);
+  ChoiceStr.erase(ChoiceStr.end() - 1);
 
   if (All)
     OutputFilename = ChoiceStr + ".ll";

@@ -1,0 +1,13 @@
+- generate undef
+- generate calls to intrinsics
+- generate x-with-overflow calls
+- generate insert/extractvalue
+- generate icmps
+- generate select
+- generate trunc/sext/zext
+- generate br
+- generate switch
+- generate phi
+- generate load/store/alloca
+- remove unused parameters
+- nake filenames using hashing?

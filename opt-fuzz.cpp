@@ -99,6 +99,18 @@ static Value *getVal(unsigned Width) {
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
+  if (Budget > 0 && Choose(2)) {
+    unsigned NewW = Width*2;
+    if (Verbose)
+      errs() << "adding a trunc from " << NewW << " to " << Width <<
+        " and budget = " << Budget << "\n";
+    --Budget;
+    Value *V = Builder->CreateTrunc(genVal(Budget, NewW, /* ConstOK = */ false),
+                                    Type::getIntNTy(*C, Width));
+    Vals.push_back(V);
+    return V;
+  }
+
   if (Budget > 0 && Width > 1 && Choose(2)) {
     unsigned NewW = Width/2;
     if (NewW > 1 && Choose(2))
@@ -249,6 +261,8 @@ int main(int argc, char **argv) {
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
     // FIXME this isn't enough unless W == 2
     ArgsTy.push_back(IntegerType::getIntNTy(*C, 1));
+    ArgsTy.push_back(IntegerType::getIntNTy(*C, 2*W));
+    ArgsTy.push_back(IntegerType::getIntNTy(*C, 4*W));
   }
   FunctionType *FuncTy = FunctionType::get(Type::getIntNTy(*C, W), ArgsTy, 0);
   F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);

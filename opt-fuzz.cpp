@@ -39,8 +39,6 @@
 #include <unistd.h>
 using namespace llvm;
 
-static const int W = 2; // width
-static const int N = 2; // number of instructions to generate
 static const int Cpus = 4;
 
 static cl::opt<std::string> OutputFilename("o",
@@ -85,13 +83,12 @@ static int Choose(int n) {
   }
 }
 
-static int Budget = N;
 static IRBuilder<true, NoFolder> *Builder;
 static LLVMContext *C;
 static std::vector<Value *> Vals;
 static Function::arg_iterator NextArg;
 
-static Value *genVal(bool ConstOK = true) {
+static Value *genVal(int &Budget, int Width, bool ConstOK = true) {
   if (Budget > 0 && Choose(2)) {
     // make a new instruction
     --Budget;
@@ -128,9 +125,9 @@ static Value *genVal(bool ConstOK = true) {
       Op = Instruction::Xor;
       break;
     }
-    Value *L = genVal();
+    Value *L = genVal(Budget, Width);
     bool Lconst = dyn_cast<ConstantInt>(L);
-    Value *R = genVal(!Lconst);
+    Value *R = genVal(Budget, Width, !Lconst);
     Value *V = Builder->CreateBinOp(Op, L, R);
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
          Op == Instruction::Mul || Op == Instruction::Shl) &&
@@ -155,11 +152,11 @@ static Value *genVal(bool ConstOK = true) {
   }
 
   if (ConstOK && Choose(2)) {
-    int n = Choose((1 << W) + 1);
-    if (n == (1 << W))
-      return UndefValue::get(Type::getIntNTy(*C, W));
+    int n = Choose((1 << Width) + 1);
+    if (n == (1 << Width))
+      return UndefValue::get(Type::getIntNTy(*C, Width));
     else
-      return ConstantInt::get(*C, APInt(W, n));
+      return ConstantInt::get(*C, APInt(Width, n));
   }
 
   assert(NextArg);
@@ -167,6 +164,9 @@ static Value *genVal(bool ConstOK = true) {
   ++NextArg;
   return Vals.at(Choose(Vals.size()));
 }
+
+static const int W = 2; // width
+static const int N = 2; // number of instructions to generate
 
 int main(int argc, char **argv) {
   srand(::time(0) + ::getpid());
@@ -198,7 +198,8 @@ int main(int argc, char **argv) {
   NextArg = F->arg_begin();
   Builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
 
-  Value *V = genVal();
+  int Budget = N;
+  Value *V = genVal(Budget, W);
   Builder->CreateRet(V);
 
   std::string ChoiceStr = "";
@@ -224,7 +225,6 @@ int main(int argc, char **argv) {
   }
 
   Out->os() << "; Choices: " << ChoiceStr << "\n";
-
   legacy::PassManager Passes;
   Passes.add(createVerifierPass());
   Passes.add(createPrintModulePass(Out->os()));

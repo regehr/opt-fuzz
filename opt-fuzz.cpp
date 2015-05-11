@@ -108,7 +108,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
         " and budget = " << Budget << "\n";
     --Budget;
     Value *L = genVal(Budget, W);
-    bool Lconst = dyn_cast<ConstantInt>(L);
+    bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
     Value *R = genVal(Budget, W, /* ConstOK = */ !Lconst);
     CmpInst::Predicate P;
     switch (Choose(10)) {
@@ -218,7 +218,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
       break;
     }
     Value *L = genVal(Budget, Width);
-    bool Lconst = dyn_cast<ConstantInt>(L);
+    bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
     Value *R = genVal(Budget, Width, /* ConstOK = */ !Lconst);
     Value *V = Builder->CreateBinOp(Op, L, R);
     if ((Op == Instruction::Add || Op == Instruction::Sub ||

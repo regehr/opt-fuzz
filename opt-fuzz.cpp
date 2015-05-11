@@ -92,15 +92,35 @@ static std::vector<Value *> Vals;
 static Function *F;
 static std::set<Argument *>UsedArgs;
 
-static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
+static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true);
+
+static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
+  L = genVal(Budget, Width);
+  bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
+  R = genVal(Budget, Width, /* ConstOK = */ !Lconst);
+}
+
+static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
+  if (Budget > 0 && Choose(2)) {
+    if (Verbose)
+      errs() << "adding a select with width = " << Width <<
+        " and budget = " << Budget << "\n";
+    --Budget;
+    Value *L, *R;
+    genLR(L, R, Budget, Width);
+    Value *C = genVal(Budget, 1, /* ConstOK = */ false);
+    Value *V = Builder->CreateSelect(C, L, R);
+    Vals.push_back(V);
+    return V;
+  }
+
   if (Budget > 0 && Width == 1 && Choose(2)) {
     if (Verbose)
       errs() << "adding an icmp with width = " << Width <<
         " and budget = " << Budget << "\n";
     --Budget;
-    Value *L = genVal(Budget, W);
-    bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
-    Value *R = genVal(Budget, W, /* ConstOK = */ !Lconst);
+    Value *L, *R;
+    genLR(L, R, Budget, Width);
     CmpInst::Predicate P;
     switch (Choose(10)) {
     case 0:
@@ -208,9 +228,8 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
       Op = Instruction::Xor;
       break;
     }
-    Value *L = genVal(Budget, Width);
-    bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
-    Value *R = genVal(Budget, Width, /* ConstOK = */ !Lconst);
+    Value *L, *R;
+    genLR(L, R, Budget, Width);
     Value *V = Builder->CreateBinOp(Op, L, R);
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
          Op == Instruction::Mul || Op == Instruction::Shl) &&

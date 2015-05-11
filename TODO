@@ -1,3 +1,6 @@
+- avoid arbitrary ext/trunc -- only to *2 and /2 and to 1
+- after dumping file, run opt -O2 and dump it again under a different name
+- avoid generating undef, undef
 - generate select
 - generate br
 - generate switch

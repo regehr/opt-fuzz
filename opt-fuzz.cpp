@@ -148,32 +148,32 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
     return V;
   }
 
-  if (Budget > 0 && Choose(2)) {
-    unsigned NewW = Width*2;
+  if (Budget > 0 && Width == W && Choose(2)) {
+    unsigned OldW = Width*2;
     if (Verbose)
-      errs() << "adding a trunc from " << NewW << " to " << Width <<
+      errs() << "adding a trunc from " << OldW << " to " << Width <<
         " and budget = " << Budget << "\n";
     --Budget;
-    Value *V = Builder->CreateTrunc(genVal(Budget, NewW, /* ConstOK = */ false),
+    Value *V = Builder->CreateTrunc(genVal(Budget, OldW, /* ConstOK = */ false),
                                     Type::getIntNTy(*C, Width));
     Vals.push_back(V);
     return V;
   }
 
-  if (Budget > 0 && Width > 1 && Choose(2)) {
-    unsigned NewW = Width/2;
-    if (NewW > 1 && Choose(2))
-      NewW = 1;
+  if (Budget > 0 && Width == W && Choose(2)) {
+    unsigned OldW = Width/2;
+    if (OldW > 1 && Choose(2))
+      OldW = 1;
     if (Verbose)
-      errs() << "adding a zext from " << NewW << " to " << Width <<
+      errs() << "adding a zext from " << OldW << " to " << Width <<
         " and budget = " << Budget << "\n";
     --Budget;
     Value *V;
     if (Choose(2))
-      V = Builder->CreateZExt(genVal(Budget, NewW, /* ConstOK = */ false),
+      V = Builder->CreateZExt(genVal(Budget, OldW, /* ConstOK = */ false),
                               Type::getIntNTy(*C, Width));
     else
-      V = Builder->CreateSExt(genVal(Budget, NewW, /* ConstOK = */ false),
+      V = Builder->CreateSExt(genVal(Budget, OldW, /* ConstOK = */ false),
                               Type::getIntNTy(*C, Width));
     Vals.push_back(V);
     return V;
@@ -305,10 +305,10 @@ int main(int argc, char **argv) {
   std::vector<Type *> ArgsTy;
   for (int i = 0; i < N + 1; ++i) {
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
-    // FIXME this isn't enough unless W == 2
     ArgsTy.push_back(IntegerType::getIntNTy(*C, 1));
-    ArgsTy.push_back(IntegerType::getIntNTy(*C, 2*W));
-    ArgsTy.push_back(IntegerType::getIntNTy(*C, 4*W));
+    if (W/2 != 1)
+      ArgsTy.push_back(IntegerType::getIntNTy(*C, W/2));
+    ArgsTy.push_back(IntegerType::getIntNTy(*C, W*2));
   }
   unsigned RetWidth = W;
   auto FuncTy = FunctionType::get(Type::getIntNTy(*C, RetWidth), ArgsTy, 0);

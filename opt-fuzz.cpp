@@ -92,15 +92,6 @@ static std::vector<Value *> Vals;
 static Function *F;
 static std::set<Argument *>UsedArgs;
 
-static Value *getVal(unsigned Width) {
-  std::vector<Value *> Vs;
-  for (auto it = Vals.begin(); it != Vals.end(); ++it)
-    if ((*it)->getType()->getPrimitiveSizeInBits() == Width)
-      Vs.push_back(*it);
-  assert(Vs.size() > 0);
-  return Vs.at(Choose(Vs.size()));
-}
-
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
   if (Budget > 0 && Width == 1 && Choose(2)) {
     if (Verbose)
@@ -268,8 +259,12 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
     }
   }
   assert(found);
-  Value *V = getVal(Width);
-  return V;
+  std::vector<Value *> Vs;
+  for (auto it = Vals.begin(); it != Vals.end(); ++it)
+    if ((*it)->getType()->getPrimitiveSizeInBits() == Width)
+      Vs.push_back(*it);
+  assert(Vs.size() > 0);
+  return Vs.at(Choose(Vs.size()));
 }
 
 int main(int argc, char **argv) {

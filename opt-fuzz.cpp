@@ -44,20 +44,20 @@ static const int Cpus = 4;
 static cl::opt<std::string> OutputFilename("o",
                                            cl::desc("Override output filename"),
                                            cl::value_desc("filename"));
-
 static cl::opt<bool> All("all", cl::desc("Generate all programs"),
                          cl::init(false));
-
-static std::vector<int> Choices;
+static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
+static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
 
 struct shared {
   std::atomic_long Processes;
   std::atomic_long NextId;
 } * Shmem;
-
+static std::vector<int> Choices;
 static long Id;
 
 static int Choose(int n) {
+  assert(n>0);
   if (All) {
     for (int i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
@@ -86,11 +86,42 @@ static int Choose(int n) {
 static IRBuilder<true, NoFolder> *Builder;
 static LLVMContext *C;
 static std::vector<Value *> Vals;
-static Function::arg_iterator NextArg;
+static Function *F;
+static std::set<Argument *>UsedArgs;
 
-static Value *genVal(int &Budget, int Width, bool ConstOK = true) {
+static Value *getVal(unsigned Width) {
+  std::vector<Value *> Vs;
+  for (auto it = Vals.begin(); it != Vals.end(); ++it)
+    if ((*it)->getType()->getPrimitiveSizeInBits() == Width)
+      Vs.push_back(*it);
+  assert(Vs.size() > 0);
+  return Vs.at(Choose(Vs.size()));
+}
+
+static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
+  if (Budget > 0 && Width > 1 && Choose(2)) {
+    unsigned NewW = Width/2;
+    if (NewW > 1 && Choose(2))
+      NewW = 1;
+    if (Verbose)
+      errs() << "adding a zext from " << NewW << " to " << Width <<
+        " and budget = " << Budget << "\n";
+    --Budget;
+    Value *V;
+    if (Choose(2))
+      V = Builder->CreateZExt(genVal(Budget, NewW, /* ConstOK = */ false),
+                              Type::getIntNTy(*C, Width));
+    else
+      V = Builder->CreateSExt(genVal(Budget, NewW, /* ConstOK = */ false),
+                              Type::getIntNTy(*C, Width));
+    Vals.push_back(V);
+    return V;
+  }
+
   if (Budget > 0 && Choose(2)) {
-    // make a new instruction
+    if (Verbose)
+      errs() << "adding a binop with width = " << Width <<
+        " and budget = " << Budget << "\n";
     --Budget;
     Instruction::BinaryOps Op;
     switch (Choose(10)) {
@@ -127,7 +158,7 @@ static Value *genVal(int &Budget, int Width, bool ConstOK = true) {
     }
     Value *L = genVal(Budget, Width);
     bool Lconst = dyn_cast<ConstantInt>(L);
-    Value *R = genVal(Budget, Width, !Lconst);
+    Value *R = genVal(Budget, Width, /* ConstOK = */ !Lconst);
     Value *V = Builder->CreateBinOp(Op, L, R);
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
          Op == Instruction::Mul || Op == Instruction::Shl) &&
@@ -152,6 +183,9 @@ static Value *genVal(int &Budget, int Width, bool ConstOK = true) {
   }
 
   if (ConstOK && Choose(2)) {
+    if (Verbose)
+      errs() << "adding a const with width = " << Width <<
+        " and budget = " << Budget << "\n";
     int n = Choose((1 << Width) + 1);
     if (n == (1 << Width))
       return UndefValue::get(Type::getIntNTy(*C, Width));
@@ -159,19 +193,40 @@ static Value *genVal(int &Budget, int Width, bool ConstOK = true) {
       return ConstantInt::get(*C, APInt(Width, n));
   }
 
-  assert(NextArg);
-  Vals.push_back(NextArg);
-  ++NextArg;
-  return Vals.at(Choose(Vals.size()));
+  if (Verbose)
+    errs() << "adding an arg with width = " << Width <<
+      " and budget = " << Budget << "\n";
+  bool found = false;
+  for (auto it = F->arg_begin(); it != F->arg_end(); ++it) {
+    if (UsedArgs.find(it) == UsedArgs.end() &&
+        it->getType()->getPrimitiveSizeInBits() == Width) {
+      UsedArgs.insert(it);
+      Vals.push_back(it);
+      found = true;
+      break;
+    }
+  }
+  assert(found);
+  Value *V = getVal(Width);
+  return V;
 }
 
-static const int W = 2; // width
+static const unsigned W = 2; // width
 static const int N = 2; // number of instructions to generate
 
 int main(int argc, char **argv) {
-  srand(::time(0) + ::getpid());
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
+
+  if (Seed == INT_MIN) {
+    Seed = ::time(0) + ::getpid();
+  } else {
+    if (All)
+      report_fatal_error("can't supply a seed in exhaustive mode");
+  }
+  if (!All)
+    errs() << "seed = " << Seed << "\n";
+  srand(Seed);
 
   Shmem =
       (struct shared *)mmap(NULL, sizeof(struct shared), PROT_READ | PROT_WRITE,
@@ -189,13 +244,14 @@ int main(int argc, char **argv) {
 
   Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
   C = &M->getContext();
-  static std::vector<Type *> ArgsTy;
-  for (int i = 0; i < N + 1; ++i)
+  std::vector<Type *> ArgsTy;
+  for (int i = 0; i < N + 1; ++i) {
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
+    // FIXME this isn't enough unless W == 2
+    ArgsTy.push_back(IntegerType::getIntNTy(*C, 1));
+  }
   FunctionType *FuncTy = FunctionType::get(Type::getIntNTy(*C, W), ArgsTy, 0);
-  Function *F =
-      Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);
-  NextArg = F->arg_begin();
+  F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);
   Builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
 
   int Budget = N;
@@ -203,8 +259,7 @@ int main(int argc, char **argv) {
   Builder->CreateRet(V);
 
   std::string ChoiceStr = "";
-  for (std::vector<int>::iterator it = Choices.begin(); it != Choices.end();
-       ++it)
+  for (auto it = Choices.begin(); it != Choices.end(); ++it)
     ChoiceStr += std::to_string(*it) + " ";
   ChoiceStr.erase(ChoiceStr.end() - 1);
 
@@ -224,16 +279,18 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  Out->os() << "; Choices: " << ChoiceStr << "\n";
+  // Out->os() << "; Choices: " << ChoiceStr << "\n";
   legacy::PassManager Passes;
   Passes.add(createVerifierPass());
   Passes.add(createPrintModulePass(Out->os()));
   Passes.run(*M);
   Out->keep();
 
-  while (::waitpid(-1, 0, 0)) {
-    if (errno == ECHILD)
-      break;
+  if (All) {
+    while (::waitpid(-1, 0, 0)) {
+      if (errno == ECHILD)
+        break;
+    }
   }
   --Shmem->Processes;
   return 0;

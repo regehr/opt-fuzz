@@ -73,14 +73,13 @@ static int Choose(int n) {
   }
 }
 
-static std::vector<Type *> ArgsTy;
 static int Budget = N;
 static IRBuilder<true, NoFolder> *Builder;
 static LLVMContext *C;
 static std::vector<Value *> Vals;
 static Function::arg_iterator NextArg;
 
-static Value *getVal(bool ConstOK = true) {
+static Value *genVal(bool ConstOK = true) {
   if (Budget > 0 && Choose(2)) {
     // make a new instruction
     --Budget;
@@ -111,9 +110,9 @@ static Value *getVal(bool ConstOK = true) {
       Op = Instruction::Xor;
       break;
     }
-    Value *L = getVal();
+    Value *L = genVal();
     bool Lconst = dyn_cast<ConstantInt>(L);
-    Value *R = getVal(!Lconst);
+    Value *R = genVal(!Lconst);
     Value *V = Builder->CreateBinOp(Op, L, R);
     if ((Op == Instruction::Add || Op == Instruction::Sub ||
          Op == Instruction::Mul || Op == Instruction::Shl) &&
@@ -137,8 +136,12 @@ static Value *getVal(bool ConstOK = true) {
     return V;
   }
 
-  if (ConstOK && Choose(2))
-    return ConstantInt::get(*C, APInt(W, Choose(1 << W)));
+  if (ConstOK && Choose(2)) {
+    int n = Choose((1 << W) + 1);
+    if (n == (1 << W))
+      return UndefValue::get(Type::getIntNTy(*C, W));
+    return ConstantInt::get(*C, APInt(W, n));
+  }
 
   assert(NextArg);
   Vals.push_back(NextArg);
@@ -160,6 +163,7 @@ int main(int argc, char **argv) {
 
   Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
   C = &M->getContext();
+  static std::vector<Type *> ArgsTy;
   for (int i = 0; i < MaxArgs; ++i)
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
   FunctionType *FuncTy = FunctionType::get(Type::getIntNTy(*C, W), ArgsTy, 0);
@@ -168,7 +172,7 @@ int main(int argc, char **argv) {
   NextArg = F->arg_begin();
   Builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
 
-  Value *V = getVal();
+  Value *V = genVal();
   Builder->CreateRet(V);
 
   std::string ChoiceStr = "";

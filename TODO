@@ -1,4 +1,3 @@
-- generate undef
 - generate calls to intrinsics
 - generate x-with-overflow calls
 - generate insert/extractvalue

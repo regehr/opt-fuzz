@@ -288,7 +288,7 @@ int main(int argc, char **argv) {
 
   Shmem =
       (struct shared *)mmap(NULL, sizeof(struct shared), PROT_READ | PROT_WRITE,
-                            MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+                            MAP_SHARED | MAP_ANON, -1, 0);
   assert(Shmem != MAP_FAILED);
   Shmem->Processes = 1;
   Shmem->NextId = 1;
@@ -340,7 +340,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Out->os() << "; Choices: " << ChoiceStr << "\n";
   legacy::PassManager Passes;
   Passes.add(createVerifierPass());
   Passes.add(createPrintModulePass(Out->os()));

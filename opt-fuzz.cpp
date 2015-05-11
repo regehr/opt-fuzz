@@ -12,8 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <sys/wait.h>
-#include <unistd.h>
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Constants.h"
@@ -36,11 +34,14 @@
 #include <set>
 #include <sstream>
 #include <vector>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
 using namespace llvm;
 
 static const int W = 2; // width
 static const int N = 2; // number of instructions to generate
-static const int MaxArgs = N + 1;
+static const int Cpus = 4;
 
 static cl::opt<std::string> OutputFilename("o",
                                            cl::desc("Override output filename"),
@@ -51,17 +52,28 @@ static cl::opt<bool> All("all", cl::desc("Generate all programs"),
 
 static std::vector<int> Choices;
 
+struct shared {
+  std::atomic_long Processes;
+  std::atomic_long NextId;
+} *Shmem;
+
+static long Id;
+
 static int Choose(int n) {
   if (All) {
     for (int i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
       assert(ret != -1);
+      Id = Shmem->NextId.fetch_add(1);
       if (ret == 0) {
+        ++Shmem->Processes;
         Choices.push_back(i);
         return i;
       } else {
-        ret = ::wait(0);
-        assert(ret != -1);
+        if (Shmem->Processes > Cpus) {
+          ret = ::wait(0);
+          assert(ret != -1);
+        }
       }
     }
     Choices.push_back(n - 1);
@@ -140,7 +152,8 @@ static Value *genVal(bool ConstOK = true) {
     int n = Choose((1 << W) + 1);
     if (n == (1 << W))
       return UndefValue::get(Type::getIntNTy(*C, W));
-    return ConstantInt::get(*C, APInt(W, n));
+    else
+      return ConstantInt::get(*C, APInt(W, n));
   }
 
   assert(NextArg);
@@ -154,6 +167,13 @@ int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
 
+  Shmem = (struct shared *)mmap(NULL, sizeof(struct shared),
+                                PROT_READ|PROT_WRITE,
+                                MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+  assert(Shmem != MAP_FAILED);
+  Shmem->Processes = 1;
+  Shmem->NextId = 1;
+
   if (OutputFilename.empty()) {
     OutputFilename = "-";
   } else {
@@ -164,7 +184,7 @@ int main(int argc, char **argv) {
   Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
   C = &M->getContext();
   static std::vector<Type *> ArgsTy;
-  for (int i = 0; i < MaxArgs; ++i)
+  for (int i = 0; i < N + 1; ++i)
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
   FunctionType *FuncTy = FunctionType::get(Type::getIntNTy(*C, W), ArgsTy, 0);
   Function *F =
@@ -200,5 +220,10 @@ int main(int argc, char **argv) {
   Passes.run(*M);
   Out->keep();
 
+  while (::waitpid(-1, 0, 0)) {
+    if (errno == ECHILD)
+      break;
+  }
+  --Shmem->Processes;
   return 0;
 }

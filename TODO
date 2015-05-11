@@ -1,12 +1,11 @@
-- generate calls to intrinsics
-- generate x-with-overflow calls
-- generate insert/extractvalue
+- generate trunc/sext/zext
 - generate icmps
 - generate select
-- generate trunc/sext/zext
 - generate br
 - generate switch
 - generate phi
+- generate x-with-overflow calls and insert/extractvalue
 - generate load/store/alloca
+- generate calls to intrinsics
 - remove unused parameters
-- nake filenames using hashing?
+- use ids to make file names

@@ -1,5 +1,3 @@
-- generate trunc/sext/zext
-- generate icmps
 - generate select
 - generate br
 - generate switch

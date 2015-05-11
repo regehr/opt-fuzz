@@ -39,6 +39,9 @@
 #include <unistd.h>
 using namespace llvm;
 
+static const unsigned W = 2; // width
+static const int N = 2; // number of instructions to generate
+
 static const int Cpus = 4;
 
 static cl::opt<std::string> OutputFilename("o",
@@ -99,6 +102,52 @@ static Value *getVal(unsigned Width) {
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
+  if (Budget > 0 && Width == 1 && Choose(2)) {
+    if (Verbose)
+      errs() << "adding an icmp with width = " << Width <<
+        " and budget = " << Budget << "\n";
+    --Budget;
+    Value *L = genVal(Budget, W);
+    bool Lconst = dyn_cast<ConstantInt>(L);
+    Value *R = genVal(Budget, W, /* ConstOK = */ !Lconst);
+    CmpInst::Predicate P;
+    switch (Choose(10)) {
+    case 0:
+      P = CmpInst::ICMP_EQ;
+      break;
+    case 1:
+      P = CmpInst::ICMP_NE;
+      break;
+    case 2:
+      P = CmpInst::ICMP_UGT;
+      break;
+    case 3:
+      P = CmpInst::ICMP_UGE;
+      break;
+    case 4:
+      P = CmpInst::ICMP_ULT;
+      break;
+    case 5:
+      P = CmpInst::ICMP_ULE;
+      break;
+    case 6:
+      P = CmpInst::ICMP_SGT;
+      break;
+    case 7:
+      P = CmpInst::ICMP_SGE;
+      break;
+    case 8:
+      P = CmpInst::ICMP_SLT;
+      break;
+    case 9:
+      P = CmpInst::ICMP_SLE;
+      break;
+    }
+    Value *V = Builder->CreateICmp(P, L, R);
+    Vals.push_back(V);
+    return V;
+  }
+
   if (Budget > 0 && Choose(2)) {
     unsigned NewW = Width*2;
     if (Verbose)
@@ -223,9 +272,6 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true) {
   return V;
 }
 
-static const unsigned W = 2; // width
-static const int N = 2; // number of instructions to generate
-
 int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
@@ -264,12 +310,13 @@ int main(int argc, char **argv) {
     ArgsTy.push_back(IntegerType::getIntNTy(*C, 2*W));
     ArgsTy.push_back(IntegerType::getIntNTy(*C, 4*W));
   }
-  FunctionType *FuncTy = FunctionType::get(Type::getIntNTy(*C, W), ArgsTy, 0);
+  unsigned RetWidth = W;
+  auto FuncTy = FunctionType::get(Type::getIntNTy(*C, RetWidth), ArgsTy, 0);
   F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);
   Builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
 
   int Budget = N;
-  Value *V = genVal(Budget, W);
+  Value *V = genVal(Budget, RetWidth);
   Builder->CreateRet(V);
 
   std::string ChoiceStr = "";

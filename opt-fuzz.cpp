@@ -96,7 +96,7 @@ static Value *genVal(bool ConstOK = true) {
     // make a new instruction
     --Budget;
     Instruction::BinaryOps Op;
-    switch (Choose(8)) {
+    switch (Choose(10)) {
     case 0:
       Op = Instruction::Add;
       break;
@@ -113,12 +113,18 @@ static Value *genVal(bool ConstOK = true) {
       Op = Instruction::UDiv;
       break;
     case 5:
-      Op = Instruction::And;
+      Op = Instruction::SRem;
       break;
     case 6:
-      Op = Instruction::Or;
+      Op = Instruction::URem;
       break;
     case 7:
+      Op = Instruction::And;
+      break;
+    case 8:
+      Op = Instruction::Or;
+      break;
+    case 9:
       Op = Instruction::Xor;
       break;
     }
@@ -198,11 +204,16 @@ int main(int argc, char **argv) {
   std::string ChoiceStr = "";
   for (std::vector<int>::iterator it = Choices.begin(); it != Choices.end();
        ++it)
-    ChoiceStr += std::to_string(*it) + "_";
+    ChoiceStr += std::to_string(*it) + " ";
   ChoiceStr.erase(ChoiceStr.end() - 1);
 
-  if (All)
-    OutputFilename = ChoiceStr + ".ll";
+  if (All) {
+    std::stringstream ss;
+    ss.width(7);
+    ss.fill('0');
+    ss << Id << ".ll";
+    OutputFilename = ss.str();
+  }
 
   std::unique_ptr<tool_output_file> Out;
   std::error_code EC;

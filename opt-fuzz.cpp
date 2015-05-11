@@ -53,7 +53,7 @@ static std::vector<int> Choices;
 struct shared {
   std::atomic_long Processes;
   std::atomic_long NextId;
-} *Shmem;
+} * Shmem;
 
 static long Id;
 
@@ -173,9 +173,9 @@ int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
 
-  Shmem = (struct shared *)mmap(NULL, sizeof(struct shared),
-                                PROT_READ|PROT_WRITE,
-                                MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+  Shmem =
+      (struct shared *)mmap(NULL, sizeof(struct shared), PROT_READ | PROT_WRITE,
+                            MAP_SHARED | MAP_ANONYMOUS, -1, 0);
   assert(Shmem != MAP_FAILED);
   Shmem->Processes = 1;
   Shmem->NextId = 1;

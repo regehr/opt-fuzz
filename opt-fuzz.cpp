@@ -382,7 +382,8 @@ int main(int argc, char **argv) {
 
   if (Id == 0) {
     while (Shmem->Children > 0) {
-      errs() << "processes = " << Shmem->Children << "\n";
+      if (Verbose)
+        errs() << "processes = " << Shmem->Children << "\n";
       sleep(1);
     }
   } else {

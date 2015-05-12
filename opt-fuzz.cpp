@@ -37,12 +37,16 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 using namespace llvm;
 
 static const unsigned W = 2; // width
-static const int N = 2;      // number of instructions to generate
+static const int N = 3;      // number of instructions to generate
+static const int FileDigits = 3;
 
-static const int Cpus = 4;
+static const int Cpus = 5;
 
 static cl::opt<bool> All("all", cl::desc("Generate all programs"),
                          cl::init(false));
@@ -293,8 +297,6 @@ int main(int argc, char **argv) {
     if (All)
       report_fatal_error("can't supply a seed in exhaustive mode");
   }
-  if (!All)
-    errs() << "seed = " << Seed << "\n";
   srand(Seed);
 
   Shmem =
@@ -304,7 +306,7 @@ int main(int argc, char **argv) {
   Shmem->Processes = 1;
   Shmem->NextId = 1;
 
-  Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
+  Module *M = new Module("opt-fuzz", getGlobalContext());
   C = &M->getContext();
   std::vector<Type *> ArgsTy;
   for (int i = 0; i < N + 1; ++i) {
@@ -316,7 +318,7 @@ int main(int argc, char **argv) {
   }
   unsigned RetWidth = W;
   auto FuncTy = FunctionType::get(Type::getIntNTy(*C, RetWidth), ArgsTy, 0);
-  F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "autogen", M);
+  F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "func", M);
   Builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
 
   int Budget = N;
@@ -328,28 +330,41 @@ int main(int argc, char **argv) {
     ChoiceStr += std::to_string(*it) + " ";
   ChoiceStr.erase(ChoiceStr.end() - 1);
 
-  std::string OutputFilename = "-";
-  if (All) {
-    std::stringstream ss;
-    ss.width(7);
-    ss.fill('0');
-    ss << Id << ".ll";
-    OutputFilename = ss.str();
-  }
-
-  std::unique_ptr<tool_output_file> Out;
-  std::error_code EC;
-  Out.reset(new tool_output_file(OutputFilename, EC, sys::fs::F_None));
-  if (EC) {
-    errs() << EC.message() << '\n';
-    return 1;
-  }
+  std::string SStr;
+  raw_string_ostream SS(SStr);
 
   legacy::PassManager Passes;
   Passes.add(createVerifierPass());
-  Passes.add(createPrintModulePass(Out->os()));
+  Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
-  Out->keep();
+
+  if (All) {
+    std::stringstream ss;
+    std::stringstream ss2;
+    ss.width(7);
+    ss.fill('0');
+    ss << Id;
+    ss2 << "func" << Id;
+    std::string s = ss.str();
+    int pos = s.length() - FileDigits;
+    std::string FN = s.substr(pos, FileDigits) + ".ll";
+    s.erase(pos, FileDigits);
+    std::string func = SS.str();
+    func.replace(func.find("func"), 4, ss2.str());
+    int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
+    assert(fd > 2);
+    /*
+     * bad hack -- instead of locking the file we're going to count on an atomic
+     * write and abort if it doesn't work -- this works fine on Linux
+     */
+    unsigned res = write(fd, func.c_str(), func.length());
+    assert(res == func.length());
+    res = close(fd);
+    assert(res == 0);
+  } else {
+    outs() << "; seed = " << Seed << "\n";
+    outs() << SS.str();
+  }
 
   if (All) {
     while (::waitpid(-1, 0, 0)) {

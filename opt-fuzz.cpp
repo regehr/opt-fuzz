@@ -43,11 +43,18 @@
 using namespace llvm;
 
 static const unsigned W = 2; // width
-static const int N = 3;      // number of instructions to generate
+static const int N = 4;      // number of instructions to generate
 static const int FileDigits = 3;
 
 static const int Cpus = 4;
 
+static cl::opt<bool> OneBinop("onebinop",
+                              cl::desc("Only print one kind of binop"),
+                              cl::init(false));
+static cl::opt<bool> NoUB("noub", cl::desc("Do not put UB flags on binops"),
+                          cl::init(false));
+static cl::opt<bool> OneConst("oneconst", cl::desc("Only use one constant value"),
+                              cl::init(false));
 static cl::opt<bool> All("all", cl::desc("Generate all programs"),
                          cl::init(false));
 static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
@@ -211,7 +218,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
              << " and budget = " << Budget << "\n";
     --Budget;
     Instruction::BinaryOps Op;
-    switch (Choose(10)) {
+    switch (OneBinop ? 0 : Choose(10)) {
     case 0:
       Op = Instruction::Add;
       break;
@@ -246,23 +253,25 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     Value *L, *R;
     genLR(L, R, Budget, Width);
     Value *V = Builder->CreateBinOp(Op, L, R);
-    if ((Op == Instruction::Add || Op == Instruction::Sub ||
-         Op == Instruction::Mul || Op == Instruction::Shl) &&
-        Choose(2)) {
-      BinaryOperator *B = cast<BinaryOperator>(V);
-      B->setHasNoSignedWrap(true);
-    }
-    if ((Op == Instruction::Add || Op == Instruction::Sub ||
-         Op == Instruction::Mul || Op == Instruction::Shl) &&
-        Choose(2)) {
-      BinaryOperator *B = cast<BinaryOperator>(V);
-      B->setHasNoUnsignedWrap(true);
-    }
-    if ((Op == Instruction::UDiv || Op == Instruction::SDiv ||
-         Op == Instruction::LShr || Op == Instruction::AShr) &&
-        Choose(2)) {
-      BinaryOperator *B = cast<BinaryOperator>(V);
-      B->setIsExact(true);
+    if (!NoUB) {
+      if ((Op == Instruction::Add || Op == Instruction::Sub ||
+           Op == Instruction::Mul || Op == Instruction::Shl) &&
+          Choose(2)) {
+        BinaryOperator *B = cast<BinaryOperator>(V);
+        B->setHasNoSignedWrap(true);
+      }
+      if ((Op == Instruction::Add || Op == Instruction::Sub ||
+           Op == Instruction::Mul || Op == Instruction::Shl) &&
+          Choose(2)) {
+        BinaryOperator *B = cast<BinaryOperator>(V);
+        B->setHasNoUnsignedWrap(true);
+      }
+      if ((Op == Instruction::UDiv || Op == Instruction::SDiv ||
+           Op == Instruction::LShr || Op == Instruction::AShr) &&
+          Choose(2)) {
+        BinaryOperator *B = cast<BinaryOperator>(V);
+        B->setIsExact(true);
+      }
     }
     Vals.push_back(V);
     return V;
@@ -272,11 +281,15 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     if (Verbose)
       errs() << "adding a const with width = " << Width
              << " and budget = " << Budget << "\n";
-    int n = Choose((1 << Width) + 1);
-    if (n == (1 << Width))
+    if (OneConst) {
       return UndefValue::get(Type::getIntNTy(*C, Width));
-    else
-      return ConstantInt::get(*C, APInt(Width, n));
+    } else {
+      int n = Choose((1 << Width) + 1);
+      if (n == (1 << Width))
+        return UndefValue::get(Type::getIntNTy(*C, Width));
+      else
+        return ConstantInt::get(*C, APInt(Width, n));
+    }
   }
 
   if (Verbose)

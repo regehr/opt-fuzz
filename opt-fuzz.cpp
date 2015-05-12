@@ -42,14 +42,17 @@
 #include <fcntl.h>
 using namespace llvm;
 
-static const unsigned W = 2; // width
+static const unsigned W = 32; // width
 static const int N = 4;      // number of instructions to generate
 static const int FileDigits = 3;
 
 static const int Cpus = 4;
 
+static cl::opt<bool> OneICmp("oneicmp",
+                             cl::desc("Only emit one kind of icmp"),
+                             cl::init(false));
 static cl::opt<bool> OneBinop("onebinop",
-                              cl::desc("Only print one kind of binop"),
+                              cl::desc("Only emit one kind of binop"),
                               cl::init(false));
 static cl::opt<bool> NoUB("noub", cl::desc("Do not put UB flags on binops"),
                           cl::init(false));
@@ -124,7 +127,7 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
-  if (Budget > 0 && Choose(2)) {
+  if (Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
       errs() << "adding a select with width = " << Width
              << " and budget = " << Budget << "\n";
@@ -145,7 +148,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     Value *L, *R;
     genLR(L, R, Budget, Width);
     CmpInst::Predicate P;
-    switch (Choose(10)) {
+    switch (OneICmp ? 0 : Choose(10)) {
     case 0:
       P = CmpInst::ICMP_EQ;
       break;
@@ -213,7 +216,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     return V;
   }
 
-  if (Budget > 0 && Choose(2)) {
+  if (Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
       errs() << "adding a binop with width = " << Width
              << " and budget = " << Budget << "\n";
@@ -306,7 +309,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
       break;
     }
   }
-  check(found);
+  check(found && "argh, ran out of args");
   std::vector<Value *> Vs;
   for (auto it = Vals.begin(); it != Vals.end(); ++it)
     if ((*it)->getType()->getPrimitiveSizeInBits() == Width)

@@ -339,7 +339,7 @@ int main(int argc, char **argv) {
   Shmem->Children = 0;
   Shmem->NextId = 1;
 
-  Module *M = new Module("opt-fuzz", getGlobalContext());
+  Module *M = new Module("", getGlobalContext());
   C = &M->getContext();
   std::vector<Type *> ArgsTy;
   for (int i = 0; i < N + 1; ++i) {

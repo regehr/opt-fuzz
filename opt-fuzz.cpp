@@ -44,9 +44,6 @@ static const int N = 2;      // number of instructions to generate
 
 static const int Cpus = 4;
 
-static cl::opt<std::string> OutputFilename("o",
-                                           cl::desc("Override output filename"),
-                                           cl::value_desc("filename"));
 static cl::opt<bool> All("all", cl::desc("Generate all programs"),
                          cl::init(false));
 static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
@@ -307,13 +304,6 @@ int main(int argc, char **argv) {
   Shmem->Processes = 1;
   Shmem->NextId = 1;
 
-  if (OutputFilename.empty()) {
-    OutputFilename = "-";
-  } else {
-    if (All)
-      report_fatal_error("cannot specify output file in exhaustive mode");
-  }
-
   Module *M = new Module("/tmp/autogen.bc", getGlobalContext());
   C = &M->getContext();
   std::vector<Type *> ArgsTy;
@@ -338,6 +328,7 @@ int main(int argc, char **argv) {
     ChoiceStr += std::to_string(*it) + " ";
   ChoiceStr.erase(ChoiceStr.end() - 1);
 
+  std::string OutputFilename = "-";
   if (All) {
     std::stringstream ss;
     ss.width(7);

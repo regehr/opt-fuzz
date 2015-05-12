@@ -1,8 +1,8 @@
 - after dumping file, run opt -O2 and dump it again under a different name
-- generate select
 - generate br
 - generate phi
 - generate x-with-overflow calls and insert/extractvalue
 - generate load/store/alloca
 - generate calls to intrinsics
 - remove unused parameters
+- put files into subdirs, or else put many functions into each file

@@ -40,7 +40,7 @@
 using namespace llvm;
 
 static const unsigned W = 2; // width
-static const int N = 2; // number of instructions to generate
+static const int N = 2;      // number of instructions to generate
 
 static const int Cpus = 4;
 
@@ -60,7 +60,7 @@ static std::vector<int> Choices;
 static long Id;
 
 static int Choose(int n) {
-  assert(n>0);
+  assert(n > 0);
   if (All) {
     for (int i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
@@ -90,7 +90,7 @@ static IRBuilder<true, NoFolder> *Builder;
 static LLVMContext *C;
 static std::vector<Value *> Vals;
 static Function *F;
-static std::set<Argument *>UsedArgs;
+static std::set<Argument *> UsedArgs;
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true);
 
@@ -103,8 +103,8 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
   if (Budget > 0 && Choose(2)) {
     if (Verbose)
-      errs() << "adding a select with width = " << Width <<
-        " and budget = " << Budget << "\n";
+      errs() << "adding a select with width = " << Width
+             << " and budget = " << Budget << "\n";
     --Budget;
     Value *L, *R;
     genLR(L, R, Budget, Width);
@@ -116,8 +116,8 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
 
   if (Budget > 0 && Width == 1 && Choose(2)) {
     if (Verbose)
-      errs() << "adding an icmp with width = " << Width <<
-        " and budget = " << Budget << "\n";
+      errs() << "adding an icmp with width = " << Width
+             << " and budget = " << Budget << "\n";
     --Budget;
     Value *L, *R;
     genLR(L, R, Budget, Width);
@@ -160,10 +160,10 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
-    unsigned OldW = Width*2;
+    unsigned OldW = Width * 2;
     if (Verbose)
-      errs() << "adding a trunc from " << OldW << " to " << Width <<
-        " and budget = " << Budget << "\n";
+      errs() << "adding a trunc from " << OldW << " to " << Width
+             << " and budget = " << Budget << "\n";
     --Budget;
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, /* ConstOK = */ false),
                                     Type::getIntNTy(*C, Width));
@@ -172,12 +172,12 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
-    unsigned OldW = Width/2;
+    unsigned OldW = Width / 2;
     if (OldW > 1 && Choose(2))
       OldW = 1;
     if (Verbose)
-      errs() << "adding a zext from " << OldW << " to " << Width <<
-        " and budget = " << Budget << "\n";
+      errs() << "adding a zext from " << OldW << " to " << Width
+             << " and budget = " << Budget << "\n";
     --Budget;
     Value *V;
     if (Choose(2))
@@ -192,8 +192,8 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
 
   if (Budget > 0 && Choose(2)) {
     if (Verbose)
-      errs() << "adding a binop with width = " << Width <<
-        " and budget = " << Budget << "\n";
+      errs() << "adding a binop with width = " << Width
+             << " and budget = " << Budget << "\n";
     --Budget;
     Instruction::BinaryOps Op;
     switch (Choose(10)) {
@@ -255,8 +255,8 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
 
   if (ConstOK && Choose(2)) {
     if (Verbose)
-      errs() << "adding a const with width = " << Width <<
-        " and budget = " << Budget << "\n";
+      errs() << "adding a const with width = " << Width
+             << " and budget = " << Budget << "\n";
     int n = Choose((1 << Width) + 1);
     if (n == (1 << Width))
       return UndefValue::get(Type::getIntNTy(*C, Width));
@@ -265,8 +265,8 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
   }
 
   if (Verbose)
-    errs() << "adding an arg with width = " << Width <<
-      " and budget = " << Budget << "\n";
+    errs() << "adding an arg with width = " << Width
+           << " and budget = " << Budget << "\n";
   bool found = false;
   for (auto it = F->arg_begin(); it != F->arg_end(); ++it) {
     if (UsedArgs.find(it) == UsedArgs.end() &&
@@ -320,9 +320,9 @@ int main(int argc, char **argv) {
   for (int i = 0; i < N + 1; ++i) {
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
     ArgsTy.push_back(IntegerType::getIntNTy(*C, 1));
-    if (W/2 != 1)
-      ArgsTy.push_back(IntegerType::getIntNTy(*C, W/2));
-    ArgsTy.push_back(IntegerType::getIntNTy(*C, W*2));
+    if (W / 2 != 1)
+      ArgsTy.push_back(IntegerType::getIntNTy(*C, W / 2));
+    ArgsTy.push_back(IntegerType::getIntNTy(*C, W * 2));
   }
   unsigned RetWidth = W;
   auto FuncTy = FunctionType::get(Type::getIntNTy(*C, RetWidth), ArgsTy, 0);

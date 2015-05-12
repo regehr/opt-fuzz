@@ -53,7 +53,8 @@ static cl::opt<bool> OneBinop("onebinop",
                               cl::init(false));
 static cl::opt<bool> NoUB("noub", cl::desc("Do not put UB flags on binops"),
                           cl::init(false));
-static cl::opt<bool> OneConst("oneconst", cl::desc("Only use one constant value"),
+static cl::opt<bool> OneConst("oneconst",
+                              cl::desc("Only use one constant value"),
                               cl::init(false));
 static cl::opt<bool> All("all", cl::desc("Generate all programs"),
                          cl::init(false));
@@ -72,8 +73,8 @@ static long Id;
 
 static int __check_handler(const char *exp, const char *file, const int line) {
   std::string err = "Assertion `" + std::string(exp) + "` failed at line " +
-    std::to_string(line) + " of file " + std::string(file) + " with choices: " +
-    Choices + "\n";
+                    std::to_string(line) + " of file " + std::string(file) +
+                    " with choices: " + Choices + "\n";
   errs() << err;
   --Shmem->Children;
   exit(-1);

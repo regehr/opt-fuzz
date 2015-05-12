@@ -46,43 +46,57 @@ static const unsigned W = 2; // width
 static const int N = 3;      // number of instructions to generate
 static const int FileDigits = 3;
 
-static const int Cpus = 5;
+static const int Cpus = 4;
 
 static cl::opt<bool> All("all", cl::desc("Generate all programs"),
                          cl::init(false));
 static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
 static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
+static cl::opt<std::string> ForcedChoiceStr("choices",
+                                            cl::desc("Force these choices"));
+static std::vector<int> ForcedChoices;
 
 struct shared {
-  std::atomic_long Processes;
+  std::atomic_long Children;
   std::atomic_long NextId;
 } * Shmem;
-static std::vector<int> Choices;
+static std::string Choices;
 static long Id;
 
+static int __check_handler(const char *exp, const char *file, const int line) {
+  std::string err = "Assertion `" + std::string(exp) + "` failed at line " +
+    std::to_string(line) + " of file " + std::string(file) + " with choices: " +
+    Choices + "\n";
+  errs() << err;
+  --Shmem->Children;
+  exit(-1);
+}
+
+#define check(x) ((void)(!(x) && __check_handler(#x, __FILE__, __LINE__)))
+
 static int Choose(int n) {
-  assert(n > 0);
+  check(n > 0);
   if (All) {
     for (int i = 0; i < (n - 1); ++i) {
+      if (Shmem->Children >= Cpus)
+        ::wait(0);
       int ret = ::fork();
-      assert(ret != -1);
-      Id = Shmem->NextId.fetch_add(1);
+      check(ret != -1);
       if (ret == 0) {
-        ++Shmem->Processes;
-        Choices.push_back(i);
+        Id = Shmem->NextId.fetch_add(1);
+        ++Shmem->Children;
+        Choices += std::to_string(i) + " ";
         return i;
-      } else {
-        if (Shmem->Processes > Cpus) {
-          ret = ::wait(0);
-          assert(ret != -1);
-        }
       }
     }
-    Choices.push_back(n - 1);
+    Choices += std::to_string(n - 1) + " ";
     return n - 1;
+  } else if (!ForcedChoiceStr.empty()) {
+    static int Choice = 0;
+    return ForcedChoices[Choice++];
   } else {
     int i = rand() % n;
-    Choices.push_back(i);
+    Choices += std::to_string(i) + " ";
     return i;
   }
 }
@@ -278,18 +292,24 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
       break;
     }
   }
-  assert(found);
+  check(found);
   std::vector<Value *> Vs;
   for (auto it = Vals.begin(); it != Vals.end(); ++it)
     if ((*it)->getType()->getPrimitiveSizeInBits() == Width)
       Vs.push_back(*it);
-  assert(Vs.size() > 0);
+  check(Vs.size() > 0);
   return Vs.at(Choose(Vs.size()));
 }
 
 int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
+
+  if (!ForcedChoiceStr.empty()) {
+    std::stringstream ss(ForcedChoiceStr);
+    copy(std::istream_iterator<int>(ss), std::istream_iterator<int>(),
+         std::back_inserter(ForcedChoices));
+  }
 
   if (Seed == INT_MIN) {
     Seed = ::time(0) + ::getpid();
@@ -302,8 +322,8 @@ int main(int argc, char **argv) {
   Shmem =
       (struct shared *)mmap(NULL, sizeof(struct shared), PROT_READ | PROT_WRITE,
                             MAP_SHARED | MAP_ANON, -1, 0);
-  assert(Shmem != MAP_FAILED);
-  Shmem->Processes = 1;
+  check(Shmem != MAP_FAILED);
+  Shmem->Children = 0;
   Shmem->NextId = 1;
 
   Module *M = new Module("opt-fuzz", getGlobalContext());
@@ -312,8 +332,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < N + 1; ++i) {
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W));
     ArgsTy.push_back(IntegerType::getIntNTy(*C, 1));
-    if (W / 2 != 1)
-      ArgsTy.push_back(IntegerType::getIntNTy(*C, W / 2));
+    ArgsTy.push_back(IntegerType::getIntNTy(*C, W / 2));
     ArgsTy.push_back(IntegerType::getIntNTy(*C, W * 2));
   }
   unsigned RetWidth = W;
@@ -324,11 +343,6 @@ int main(int argc, char **argv) {
   int Budget = N;
   Value *V = genVal(Budget, RetWidth);
   Builder->CreateRet(V);
-
-  std::string ChoiceStr = "";
-  for (auto it = Choices.begin(); it != Choices.end(); ++it)
-    ChoiceStr += std::to_string(*it) + " ";
-  ChoiceStr.erase(ChoiceStr.end() - 1);
 
   std::string SStr;
   raw_string_ostream SS(SStr);
@@ -352,26 +366,27 @@ int main(int argc, char **argv) {
     std::string func = SS.str();
     func.replace(func.find("func"), 4, ss2.str());
     int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
-    assert(fd > 2);
+    check(fd > 2);
     /*
      * bad hack -- instead of locking the file we're going to count on an atomic
      * write and abort if it doesn't work -- this works fine on Linux
      */
     unsigned res = write(fd, func.c_str(), func.length());
-    assert(res == func.length());
+    check(res == func.length());
     res = close(fd);
-    assert(res == 0);
+    check(res == 0);
   } else {
     outs() << "; seed = " << Seed << "\n";
     outs() << SS.str();
   }
 
-  if (All) {
-    while (::waitpid(-1, 0, 0)) {
-      if (errno == ECHILD)
-        break;
+  if (Id == 0) {
+    while (Shmem->Children > 0) {
+      errs() << "processes = " << Shmem->Children << "\n";
+      sleep(1);
     }
+  } else {
+    --Shmem->Children;
   }
-  --Shmem->Processes;
   return 0;
 }

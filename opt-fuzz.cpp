@@ -44,7 +44,7 @@ using namespace llvm;
 
 static const unsigned W = 32; // width
 static const int N = 3;      // number of instructions to generate
-static const int FileDigits = 3;
+static const int NumFiles = 1000;
 
 static const int Cpus = 4;
 
@@ -355,10 +355,10 @@ int main(int argc, char **argv) {
     if (All)
       report_fatal_error("can't supply a seed in exhaustive mode");
   }
-  srand(Seed);
+  ::srand(Seed);
 
   Shmem =
-      (struct shared *)mmap(NULL, sizeof(struct shared), PROT_READ | PROT_WRITE,
+    (struct shared *)::mmap(NULL, sizeof(struct shared), PROT_READ | PROT_WRITE,
                             MAP_SHARED | MAP_ANON, -1, 0);
   check(Shmem != MAP_FAILED);
   Shmem->Children = 0;
@@ -413,17 +413,11 @@ int main(int argc, char **argv) {
 
   if (All) {
     std::stringstream ss;
-    std::stringstream ss2;
-    ss.width(7);
-    ss.fill('0');
-    ss << Id;
-    ss2 << "func" << Id;
-    std::string s = ss.str();
-    int pos = s.length() - FileDigits;
-    std::string FN = s.substr(pos, FileDigits) + ".ll";
-    s.erase(pos, FileDigits);
+    ss << "func" << std::to_string(Id);
+    ::srand(::time(0) + ::getpid());
+    std::string FN = std::to_string(rand() % NumFiles) + ".ll";
     std::string func = SS.str();
-    func.replace(func.find("func"), 4, ss2.str());
+    func.replace(func.find("func"), 4, ss.str());
     int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
     check(fd > 2);
     /*

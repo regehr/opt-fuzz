@@ -43,7 +43,7 @@
 using namespace llvm;
 
 static const unsigned W = 32; // width
-static const int N = 4;      // number of instructions to generate
+static const int N = 3;      // number of instructions to generate
 static const int FileDigits = 3;
 
 static const int Cpus = 4;
@@ -307,7 +307,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
       errs() << "adding a const with width = " << Width
              << " and budget = " << Budget << "\n";
     if (OneConst) {
-      return UndefValue::get(Type::getIntNTy(*C, Width));
+      return ConstantInt::get(*C, APInt(Width, 1));
     } else {
       int n = Choose((1 << Width) + 1);
       if (n == (1 << Width))

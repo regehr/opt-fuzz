@@ -117,6 +117,7 @@ static LLVMContext *C;
 static std::vector<Value *> Vals;
 static Function *F;
 static std::set<Argument *> UsedArgs;
+static std::vector<BasicBlock *>BBs;
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true);
 
@@ -127,6 +128,26 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
+  if (Budget > 0 && Choose(2)) {
+    if (Verbose)
+      errs() << "adding a branch, budget = " << Budget << "\n";
+    --Budget;
+    // illegal target-- we'll fix it up later
+    BranchInst *Br;
+    if (Choose(2)) {
+      Br = Builder->CreateBr(BBs[0]);
+    } else {
+      Value *C = genVal(Budget, 1, /* ConstOK = */ false);
+      Br = Builder->CreateCondBr(C, BBs[0], BBs[0]);
+    }
+    check(Br);
+    BasicBlock *BB = BasicBlock::Create(*C, "", F);
+    check(BB);
+    BBs.push_back(BB);
+    Builder->SetInsertPoint(BB);
+    return genVal(Budget, Width);
+  }
+
   if (Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
       errs() << "adding a select with width = " << Width
@@ -355,15 +376,36 @@ int main(int argc, char **argv) {
   unsigned RetWidth = W;
   auto FuncTy = FunctionType::get(Type::getIntNTy(*C, RetWidth), ArgsTy, 0);
   F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "func", M);
-  Builder = new IRBuilder<true, NoFolder>(BasicBlock::Create(*C, "", F));
-
+  BBs.push_back(BasicBlock::Create(*C, "", F));
+  Builder = new IRBuilder<true, NoFolder>(BBs[0]);
   int Budget = N;
+  Builder->SetInsertPoint(BBs[0]);
+
+  // action happens here
   Value *V = genVal(Budget, RetWidth);
+
+  // now every bb has a terminator
   Builder->CreateRet(V);
+
+  // fixup branch targets
+  // FIXME -- this just points to all bbs, need to split bbs also
+  for (auto bb = F->begin(), fe = F->end(); bb != fe; ++bb) {
+    for (auto i = bb->begin(), be = bb->end(); i != be; ++i) {
+      if (auto bi = dyn_cast<BranchInst>(i)) {
+        bi->setSuccessor(0, BBs[1 + Choose(BBs.size() - 1)]);
+        if (bi->isConditional())
+          bi->setSuccessor(1, BBs[1 + Choose(BBs.size() - 1)]);
+      }
+    }
+  }
+
+  if (Verbose && !All) {
+    outs() << "; choices = " << Choices << "\n";
+    outs() << "; seed = " << Seed << "\n";
+  }
 
   std::string SStr;
   raw_string_ostream SS(SStr);
-
   legacy::PassManager Passes;
   Passes.add(createVerifierPass());
   Passes.add(createPrintModulePass(SS));
@@ -393,7 +435,6 @@ int main(int argc, char **argv) {
     res = close(fd);
     check(res == 0);
   } else {
-    outs() << "; seed = " << Seed << "\n";
     outs() << SS.str();
   }
 

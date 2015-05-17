@@ -132,9 +132,9 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     if (Verbose)
       errs() << "adding a branch, budget = " << Budget << "\n";
     --Budget;
-    // illegal target-- we'll fix it up later
     BranchInst *Br;
-    if (Choose(2)) {
+    // avoid putting an unconditional branch at the start of a BB
+    if (Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
       Br = Builder->CreateBr(BBs[0]);
     } else {
       Value *C = genVal(Budget, 1, /* ConstOK = */ false);

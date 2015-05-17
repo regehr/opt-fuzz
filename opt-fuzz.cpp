@@ -43,13 +43,12 @@
 using namespace llvm;
 
 static const unsigned W = 32; // width
-static const int N = 3;      // number of instructions to generate
+static const int N = 4;       // number of instructions to generate
 static const int NumFiles = 1000;
 
 static const int Cpus = 4;
 
-static cl::opt<bool> OneICmp("oneicmp",
-                             cl::desc("Only emit one kind of icmp"),
+static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp"),
                              cl::init(false));
 static cl::opt<bool> OneBinop("onebinop",
                               cl::desc("Only emit one kind of binop"),
@@ -74,6 +73,10 @@ struct shared {
 static std::string Choices;
 static long Id;
 
+/*
+ * custom assert handler since it's critical we decrease the process count
+ * before exiting
+ */
 static int __check_handler(const char *exp, const char *file, const int line) {
   std::string err = "Assertion `" + std::string(exp) + "` failed at line " +
                     std::to_string(line) + " of file " + std::string(file) +
@@ -117,7 +120,7 @@ static LLVMContext *C;
 static std::vector<Value *> Vals;
 static Function *F;
 static std::set<Argument *> UsedArgs;
-static std::vector<BasicBlock *>BBs;
+static std::vector<BasicBlock *> BBs;
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true);
 
@@ -357,9 +360,9 @@ int main(int argc, char **argv) {
   }
   ::srand(Seed);
 
-  Shmem =
-    (struct shared *)::mmap(NULL, sizeof(struct shared), PROT_READ | PROT_WRITE,
-                            MAP_SHARED | MAP_ANON, -1, 0);
+  Shmem = (struct shared *)::mmap(NULL, sizeof(struct shared),
+                                  PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON,
+                                  -1, 0);
   check(Shmem != MAP_FAILED);
   Shmem->Children = 0;
   Shmem->NextId = 1;

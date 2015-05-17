@@ -385,7 +385,7 @@ int main(int argc, char **argv) {
   Builder->SetInsertPoint(BBs[0]);
 
   // action happens here
-  Value *V = genVal(Budget, RetWidth);
+  Value *V = genVal(Budget, RetWidth, /* ConstOK = */ false);
 
   // now every bb has a terminator
   Builder->CreateRet(V);

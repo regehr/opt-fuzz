@@ -122,12 +122,12 @@ static Function *F;
 static std::set<Argument *> UsedArgs;
 static std::vector<BasicBlock *> BBs;
 
-static Value *genVal(int &Budget, unsigned Width, bool ConstOK = true);
+static Value *genVal(int &Budget, unsigned Width, bool ConstOK);
 
 static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
-  L = genVal(Budget, Width);
+  L = genVal(Budget, Width, true);
   bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
-  R = genVal(Budget, Width, /* ConstOK = */ !Lconst);
+  R = genVal(Budget, Width, !Lconst);
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
@@ -140,7 +140,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     if (Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
       Br = Builder->CreateBr(BBs[0]);
     } else {
-      Value *C = genVal(Budget, 1, /* ConstOK = */ false);
+      Value *C = genVal(Budget, 1, false);
       Br = Builder->CreateCondBr(C, BBs[0], BBs[0]);
     }
     check(Br);
@@ -148,7 +148,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     check(BB);
     BBs.push_back(BB);
     Builder->SetInsertPoint(BB);
-    return genVal(Budget, Width);
+    return genVal(Budget, Width, ConstOK);
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
@@ -158,7 +158,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     --Budget;
     Value *L, *R;
     genLR(L, R, Budget, Width);
-    Value *C = genVal(Budget, 1, /* ConstOK = */ false);
+    Value *C = genVal(Budget, 1, false);
     Value *V = Builder->CreateSelect(C, L, R);
     Vals.push_back(V);
     return V;
@@ -215,7 +215,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
       errs() << "adding a trunc from " << OldW << " to " << Width
              << " and budget = " << Budget << "\n";
     --Budget;
-    Value *V = Builder->CreateTrunc(genVal(Budget, OldW, /* ConstOK = */ false),
+    Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(*C, Width));
     Vals.push_back(V);
     return V;
@@ -231,10 +231,10 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
     --Budget;
     Value *V;
     if (Choose(2))
-      V = Builder->CreateZExt(genVal(Budget, OldW, /* ConstOK = */ false),
+      V = Builder->CreateZExt(genVal(Budget, OldW, false),
                               Type::getIntNTy(*C, Width));
     else
-      V = Builder->CreateSExt(genVal(Budget, OldW, /* ConstOK = */ false),
+      V = Builder->CreateSExt(genVal(Budget, OldW, false),
                               Type::getIntNTy(*C, Width));
     Vals.push_back(V);
     return V;
@@ -385,7 +385,7 @@ int main(int argc, char **argv) {
   Builder->SetInsertPoint(BBs[0]);
 
   // action happens here
-  Value *V = genVal(Budget, RetWidth, /* ConstOK = */ false);
+  Value *V = genVal(Budget, RetWidth, false);
 
   // now every bb has a terminator
   Builder->CreateRet(V);

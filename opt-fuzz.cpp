@@ -392,9 +392,20 @@ int main(int argc, char **argv) {
   for (auto bb = F->begin(), fe = F->end(); bb != fe; ++bb) {
     for (auto i = bb->begin(), be = bb->end(); i != be; ++i) {
       if (auto bi = dyn_cast<BranchInst>(i)) {
-        bi->setSuccessor(0, BBs[1 + Choose(BBs.size() - 1)]);
-        if (bi->isConditional())
-          bi->setSuccessor(1, BBs[1 + Choose(BBs.size() - 1)]);
+        size_t s = BBs.size();
+        int target1 = 1 + Choose(s - 1);
+        bi->setSuccessor(0, BBs[target1]);
+        if (bi->isConditional()) {
+          // no need to continue-- discovering this fact kind of late
+          if (s <= 2) {
+            --Shmem->Children;
+            exit(0);
+          }
+          int target2 = 1 + Choose(s - 2);
+          if (target1 == target2)
+            target2++;
+          bi->setSuccessor(1, BBs[target2]);
+        }
       }
     }
   }

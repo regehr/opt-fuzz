@@ -1,4 +1,3 @@
-- avoid making conditional branch go to the same place
 - generate phi
 - generate x-with-overflow calls and insert/extractvalue
 - generate load/store/alloca

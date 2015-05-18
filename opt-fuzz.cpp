@@ -43,7 +43,7 @@
 using namespace llvm;
 
 static const unsigned W = 32; // width
-static const int N = 5;       // number of instructions to generate
+static const int N = 4;       // number of instructions to generate
 static const int NumFiles = 1000;
 
 static const int Cpus = 4;
@@ -124,6 +124,7 @@ static std::vector<Value *> Vals;
 static Function *F;
 static std::set<Argument *> UsedArgs;
 static std::vector<BasicBlock *> BBs;
+static std::vector<BranchInst *> Branches;
 
 static void Done(void) {
   --Shmem->Children;
@@ -144,12 +145,14 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     if (Verbose)
       errs() << "adding a branch, budget = " << Budget << "\n";
     --Budget;
+    BranchInst *Br;
     if (Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
-      Builder->CreateBr(BBs[0]);
+      Br = Builder->CreateBr(BBs[0]);
     } else {
       Value *C = genVal(Budget, 1, false, ArgOK);
-      Builder->CreateCondBr(C, BBs[0], BBs[0]);
+      Br = Builder->CreateCondBr(C, BBs[0], BBs[0]);
     }
+    Branches.push_back(Br);
     BasicBlock *BB = BasicBlock::Create(*C, "", F);
     BBs.push_back(BB);
     Builder->SetInsertPoint(BB);
@@ -354,6 +357,20 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   }
 }
 
+static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
+  size_t s = BBs.size();
+  if (Avoid) {
+    if (s <= 2)
+      Done();
+    int target = 1 + Choose(s - 2);
+    if (BBs[target] == Avoid)
+      target++;
+    return BBs[target];
+  } else {
+    return BBs[1 + Choose(s - 1)];
+  }
+}
+
 int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
@@ -398,30 +415,15 @@ int main(int argc, char **argv) {
 
   // action happens here
   Value *V = genVal(Budget, RetWidth, false, false);
-
-  // now every bb has a terminator
+  // and now every BB has a terminator
   Builder->CreateRet(V);
 
   // fixup branch targets
-  // FIXME -- this just points to all bbs, need to split bbs also
-  for (auto bb = F->begin(), fe = F->end(); bb != fe; ++bb) {
-    for (auto i = bb->begin(), be = bb->end(); i != be; ++i) {
-      auto bi = dyn_cast<BranchInst>(i);
-      if (!bi)
-        continue;
-      size_t s = BBs.size();
-      int target1 = 1 + Choose(s - 1);
-      bi->setSuccessor(0, BBs[target1]);
-      if (bi->isConditional()) {
-        // no need to continue-- discovering this fact kind of late
-        if (s <= 2)
-          Done();
-        int target2 = 1 + Choose(s - 2);
-        if (target1 == target2)
-          target2++;
-        bi->setSuccessor(1, BBs[target2]);
-      }
-    }
+  for (auto bi = Branches.begin(), be = Branches.end(); bi != be; ++bi) {
+    BasicBlock *BB1 = chooseTarget();
+    (*bi)->setSuccessor(0, BB1);
+    if ((*bi)->isConditional())
+      (*bi)->setSuccessor(1, chooseTarget(BB1));
   }
 
   if (Verbose && !All) {

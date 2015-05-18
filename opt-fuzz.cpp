@@ -327,8 +327,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
 
   if (Verbose)
     errs() << "using existing val with width = " << Width
-           << " and budget = " << Budget << " and ArgOK = " <<
-           ArgOK << "\n";
+           << " and budget = " << Budget << " and ArgOK = " << ArgOK << "\n";
   std::vector<Value *> Vs;
   for (auto it = Vals.begin(); it != Vals.end(); ++it)
     if ((*it)->getType()->getPrimitiveSizeInBits() == Width)
@@ -373,9 +372,9 @@ int main(int argc, char **argv) {
   }
   ::srand(Seed);
 
-  Shmem = (struct shared *)::mmap(0, sizeof(struct shared),
-                                  PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON,
-                                  -1, 0);
+  Shmem =
+      (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
+                              MAP_SHARED | MAP_ANON, -1, 0);
   check(Shmem != MAP_FAILED);
   Shmem->Children = 0;
   Shmem->NextId = 1;
@@ -407,19 +406,20 @@ int main(int argc, char **argv) {
   // FIXME -- this just points to all bbs, need to split bbs also
   for (auto bb = F->begin(), fe = F->end(); bb != fe; ++bb) {
     for (auto i = bb->begin(), be = bb->end(); i != be; ++i) {
-      if (auto bi = dyn_cast<BranchInst>(i)) {
-        size_t s = BBs.size();
-        int target1 = 1 + Choose(s - 1);
-        bi->setSuccessor(0, BBs[target1]);
-        if (bi->isConditional()) {
-          // no need to continue-- discovering this fact kind of late
-          if (s <= 2)
-            Done();
-          int target2 = 1 + Choose(s - 2);
-          if (target1 == target2)
-            target2++;
-          bi->setSuccessor(1, BBs[target2]);
-        }
+      auto bi = dyn_cast<BranchInst>(i);
+      if (!bi)
+        continue;
+      size_t s = BBs.size();
+      int target1 = 1 + Choose(s - 1);
+      bi->setSuccessor(0, BBs[target1]);
+      if (bi->isConditional()) {
+        // no need to continue-- discovering this fact kind of late
+        if (s <= 2)
+          Done();
+        int target2 = 1 + Choose(s - 2);
+        if (target1 == target2)
+          target2++;
+        bi->setSuccessor(1, BBs[target2]);
       }
     }
   }

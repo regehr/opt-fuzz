@@ -43,7 +43,7 @@
 using namespace llvm;
 
 static const unsigned W = 32; // width
-static const int N = 4;       // number of instructions to generate
+static const int N = 5;       // number of instructions to generate
 static const int NumFiles = 1000;
 
 static const int Cpus = 4;
@@ -64,6 +64,9 @@ static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
 static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
 static cl::opt<std::string> ForcedChoiceStr("choices",
                                             cl::desc("Force these choices"));
+static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
+                            cl::init(true));
+
 static std::vector<int> ForcedChoices;
 
 struct shared {
@@ -88,10 +91,10 @@ static int __check_handler(const char *exp, const char *file, const int line) {
 
 #define check(x) ((void)(!(x) && __check_handler(#x, __FILE__, __LINE__)))
 
-static int Choose(int n) {
+static unsigned Choose(unsigned n) {
   check(n > 0);
   if (All) {
-    for (int i = 0; i < (n - 1); ++i) {
+    for (unsigned i = 0; i < (n - 1); ++i) {
       if (Shmem->Children >= Cpus)
         ::wait(0);
       int ret = ::fork();
@@ -106,10 +109,10 @@ static int Choose(int n) {
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
   } else if (!ForcedChoiceStr.empty()) {
-    static int Choice = 0;
+    static unsigned Choice = 0;
     return ForcedChoices[Choice++];
   } else {
-    int i = rand() % n;
+    unsigned i = rand() % n;
     Choices += std::to_string(i) + " ";
     return i;
   }
@@ -122,7 +125,13 @@ static Function *F;
 static std::set<Argument *> UsedArgs;
 static std::vector<BasicBlock *> BBs;
 
-static Value *genVal(int &Budget, unsigned Width, bool ConstOK);
+static void Done(void) {
+  --Shmem->Children;
+  exit(0);
+}
+
+static Value *genVal(int &Budget, unsigned Width, bool ConstOK,
+                     bool ArgOK = true);
 
 static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   L = genVal(Budget, Width, true);
@@ -130,25 +139,21 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   R = genVal(Budget, Width, !Lconst);
 }
 
-static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
-  if (Budget > 0 && Choose(2)) {
+static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
+  if (Budget > 0 && Budget != N && Choose(2)) {
     if (Verbose)
       errs() << "adding a branch, budget = " << Budget << "\n";
     --Budget;
-    BranchInst *Br;
-    // avoid putting an unconditional branch at the start of a BB
     if (Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
-      Br = Builder->CreateBr(BBs[0]);
+      Builder->CreateBr(BBs[0]);
     } else {
-      Value *C = genVal(Budget, 1, false);
-      Br = Builder->CreateCondBr(C, BBs[0], BBs[0]);
+      Value *C = genVal(Budget, 1, false, ArgOK);
+      Builder->CreateCondBr(C, BBs[0], BBs[0]);
     }
-    check(Br);
     BasicBlock *BB = BasicBlock::Create(*C, "", F);
-    check(BB);
     BBs.push_back(BB);
     Builder->SetInsertPoint(BB);
-    return genVal(Budget, Width, ConstOK);
+    return genVal(Budget, Width, ConstOK, ArgOK);
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
@@ -321,25 +326,33 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK) {
   }
 
   if (Verbose)
-    errs() << "adding an arg with width = " << Width
-           << " and budget = " << Budget << "\n";
-  bool found = false;
-  for (auto it = F->arg_begin(); it != F->arg_end(); ++it) {
-    if (UsedArgs.find(it) == UsedArgs.end() &&
-        it->getType()->getPrimitiveSizeInBits() == Width) {
-      UsedArgs.insert(it);
-      Vals.push_back(it);
-      found = true;
-      break;
-    }
-  }
-  check(found && "argh, ran out of args");
+    errs() << "using existing val with width = " << Width
+           << " and budget = " << Budget << " and ArgOK = " <<
+           ArgOK << "\n";
   std::vector<Value *> Vs;
   for (auto it = Vals.begin(); it != Vals.end(); ++it)
     if ((*it)->getType()->getPrimitiveSizeInBits() == Width)
       Vs.push_back(*it);
-  check(Vs.size() > 0);
-  return Vs.at(Choose(Vs.size()));
+  unsigned choices = Vs.size() + ArgOK ? 1 : 0;
+  if (choices == 0)
+    Done();
+  unsigned which = Choose(choices);
+  if (which == Vs.size()) {
+    Value *V = 0;
+    for (auto it = F->arg_begin(); it != F->arg_end(); ++it) {
+      if (UsedArgs.find(it) == UsedArgs.end() &&
+          it->getType()->getPrimitiveSizeInBits() == Width) {
+        UsedArgs.insert(it);
+        V = it;
+        Vals.push_back(V);
+        break;
+      }
+    }
+    check(V);
+    return V;
+  } else {
+    return Vs.at(which);
+  }
 }
 
 int main(int argc, char **argv) {
@@ -360,7 +373,7 @@ int main(int argc, char **argv) {
   }
   ::srand(Seed);
 
-  Shmem = (struct shared *)::mmap(NULL, sizeof(struct shared),
+  Shmem = (struct shared *)::mmap(0, sizeof(struct shared),
                                   PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON,
                                   -1, 0);
   check(Shmem != MAP_FAILED);
@@ -385,7 +398,7 @@ int main(int argc, char **argv) {
   Builder->SetInsertPoint(BBs[0]);
 
   // action happens here
-  Value *V = genVal(Budget, RetWidth, false);
+  Value *V = genVal(Budget, RetWidth, false, false);
 
   // now every bb has a terminator
   Builder->CreateRet(V);
@@ -400,10 +413,8 @@ int main(int argc, char **argv) {
         bi->setSuccessor(0, BBs[target1]);
         if (bi->isConditional()) {
           // no need to continue-- discovering this fact kind of late
-          if (s <= 2) {
-            --Shmem->Children;
-            exit(0);
-          }
+          if (s <= 2)
+            Done();
           int target2 = 1 + Choose(s - 2);
           if (target1 == target2)
             target2++;
@@ -421,7 +432,8 @@ int main(int argc, char **argv) {
   std::string SStr;
   raw_string_ostream SS(SStr);
   legacy::PassManager Passes;
-  Passes.add(createVerifierPass());
+  if (Verify)
+    Passes.add(createVerifierPass());
   Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
 

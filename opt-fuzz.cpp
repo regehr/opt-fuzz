@@ -14,7 +14,9 @@
 
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
@@ -138,6 +140,8 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   L = genVal(Budget, Width, true);
   bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
   R = genVal(Budget, Width, !Lconst);
+  //if (FlipLR && Choose(2))
+  // std::swap(L, R);
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
@@ -358,6 +362,24 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
 }
 
 static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
+  std::vector<inst_iterator> targets;
+  auto i = inst_begin(F), ie = inst_end(F);
+  ++i;
+  for (; i != ie; ++i)
+    if (!isa<TerminatorInst>(*i))
+      targets.push_back(i);
+  auto t = targets[Choose(targets.size())];
+  Instruction *I = &*t;
+  BasicBlock *BB;
+  if (I == I->getParent()->getFirstInsertionPt()) {
+    BB = I->getParent();
+  } else {
+    if (Verbose)
+      errs() << "splitting a BB\n";
+    BB = I->getParent()->splitBasicBlock(I, "spl");
+  }
+  return BB;
+#if 0
   size_t s = BBs.size();
   if (Avoid) {
     if (s <= 2)
@@ -369,6 +391,7 @@ static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   } else {
     return BBs[1 + Choose(s - 1)];
   }
+#endif
 }
 
 int main(int argc, char **argv) {

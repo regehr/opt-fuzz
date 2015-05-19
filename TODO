@@ -1,4 +1,4 @@
-- generate phi
+- need a way to avoid adding branches and phis that break llvm
 - generate x-with-overflow calls and insert/extractvalue
 - generate load/store/alloca
 - generate calls to intrinsics

@@ -25,6 +25,7 @@
 #include "llvm/IR/NoFolder.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -45,7 +46,7 @@
 using namespace llvm;
 
 static const unsigned W = 32; // width
-static const int N = 4;       // number of instructions to generate
+static const int N = 5;       // number of instructions to generate
 static const int NumFiles = 1000;
 
 static const int Cpus = 4;
@@ -140,17 +141,25 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   L = genVal(Budget, Width, true);
   bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
   R = genVal(Budget, Width, !Lconst);
-  // if (FlipLR && Choose(2))
-  // std::swap(L, R);
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
+  // FIXME a phi has to be at the start of the BB
+  if (Budget > 0 && Choose(2)) {
+    if (Verbose)
+      errs() << "adding a phi, budget = " << Budget << "\n";
+    --Budget;
+    Value *V = Builder->CreatePHI(Type::getIntNTy(*C, Width), N);
+    Vals.push_back(V);
+    return V;
+  }
+
   if (Budget > 0 && Budget != N && Choose(2)) {
     if (Verbose)
       errs() << "adding a branch, budget = " << Budget << "\n";
     --Budget;
     BranchInst *Br;
-    if (Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
+    if (0 && Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
       Br = Builder->CreateBr(BBs[0]);
     } else {
       Value *C = genVal(Budget, 1, false, ArgOK);
@@ -436,9 +445,19 @@ int main(int argc, char **argv) {
       (*bi)->setSuccessor(1, chooseTarget(BB1));
   }
 
-  if (Verbose && !All) {
-    outs() << "; choices = " << Choices << "\n";
-    outs() << "; seed = " << Seed << "\n";
+  // finally, fixup the Phis
+  // FIXME -- delete Phis that are in dead blocks
+  for (auto p = inst_begin(F), pe = inst_end(F); p != pe; ++p) {
+    PHINode *P = dyn_cast<PHINode>(&*p);
+    if (!P)
+      continue;
+    BasicBlock *BB = P->getParent();
+    for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
+      BasicBlock *Pred = *PI;
+      int budget = 0;
+      Value *V = genVal(budget, P->getType()->getPrimitiveSizeInBits(), true, false);
+      P->addIncoming(V, Pred);
+    }
   }
 
   std::string SStr;

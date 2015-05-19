@@ -140,7 +140,7 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   L = genVal(Budget, Width, true);
   bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
   R = genVal(Budget, Width, !Lconst);
-  //if (FlipLR && Choose(2))
+  // if (FlipLR && Choose(2))
   // std::swap(L, R);
 }
 
@@ -379,19 +379,6 @@ static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
     BB = I->getParent()->splitBasicBlock(I, "spl");
   }
   return BB;
-#if 0
-  size_t s = BBs.size();
-  if (Avoid) {
-    if (s <= 2)
-      Done();
-    int target = 1 + Choose(s - 2);
-    if (BBs[target] == Avoid)
-      target++;
-    return BBs[target];
-  } else {
-    return BBs[1 + Choose(s - 1)];
-  }
-#endif
 }
 
 int main(int argc, char **argv) {

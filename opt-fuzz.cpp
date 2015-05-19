@@ -45,8 +45,8 @@
 #include <fcntl.h>
 using namespace llvm;
 
-static const unsigned W = 32; // width
-static const int N = 5;       // number of instructions to generate
+static const unsigned W = 4; // width
+static const int N = 5;      // number of instructions to generate
 static const int NumFiles = 1000;
 
 static const int Cpus = 4;
@@ -144,7 +144,6 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
-  // FIXME a phi has to be at the start of the BB
   if (Budget > 0 && Choose(2)) {
     if (Verbose)
       errs() << "adding a phi, budget = " << Budget << "\n";
@@ -445,8 +444,22 @@ int main(int argc, char **argv) {
       (*bi)->setSuccessor(1, chooseTarget(BB1));
   }
 
-  // finally, fixup the Phis
-  // FIXME -- delete Phis that are in dead blocks
+// finally, fixup the Phis -- first by splitting any BBs where a non-Phi
+// precedes a Phi
+redo:
+  for (auto bb = F->begin(), bbe = F->end(); bb != bbe; ++bb) {
+    bool notphi = false;
+    for (auto i = bb->begin(), ie = bb->end(); i != ie; ++i) {
+      if (!isa<PHINode>(i))
+        notphi = true;
+      if (notphi && isa<PHINode>(i)) {
+        i->getParent()->splitBasicBlock(i, "phisp");
+        goto redo;
+      }
+    }
+  }
+
+  // and second by giving them incoming edges
   for (auto p = inst_begin(F), pe = inst_end(F); p != pe; ++p) {
     PHINode *P = dyn_cast<PHINode>(&*p);
     if (!P)
@@ -454,8 +467,9 @@ int main(int argc, char **argv) {
     BasicBlock *BB = P->getParent();
     for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
       BasicBlock *Pred = *PI;
-      int budget = 0;
-      Value *V = genVal(budget, P->getType()->getPrimitiveSizeInBits(), true, false);
+      check(Budget == 0);
+      Value *V =
+          genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
       P->addIncoming(V, Pred);
     }
   }

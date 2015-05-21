@@ -1,5 +1,10 @@
-- need a way to avoid adding branches and phis that break llvm
+- add an option (or make it the default) to jump only forward in
+  the list of BBs
+- suppress printing functions containing BBs with no predecessors
+- write the program that elaborates compressed functions
+- would like a way to avoid adding branches and phis that break llvm
 - remove unused parameters
+- use this syntax more for (auto &element : F) { }
 
 - generate x-with-overflow calls and insert/extractvalue
 - generate load/store/alloca

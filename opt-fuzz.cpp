@@ -45,7 +45,7 @@
 #include <fcntl.h>
 using namespace llvm;
 
-static const unsigned W = 4; // width
+static const unsigned W = 32; // width
 static const int N = 5;      // number of instructions to generate
 static const int NumFiles = 1000;
 
@@ -344,9 +344,9 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     errs() << "using existing val with width = " << Width
            << " and budget = " << Budget << " and ArgOK = " << ArgOK << "\n";
   std::vector<Value *> Vs;
-  for (auto it = Vals.begin(); it != Vals.end(); ++it)
-    if ((*it)->getType()->getPrimitiveSizeInBits() == Width)
-      Vs.push_back(*it);
+  for (auto &it : Vals)
+    if (it->getType()->getPrimitiveSizeInBits() == Width)
+      Vs.push_back(it);
   unsigned choices = Vs.size() + ArgOK ? 1 : 0;
   if (choices == 0)
     Done();
@@ -437,23 +437,23 @@ int main(int argc, char **argv) {
   Builder->CreateRet(V);
 
   // fixup branch targets
-  for (auto bi = Branches.begin(), be = Branches.end(); bi != be; ++bi) {
+  for (auto &bi : Branches) {
     BasicBlock *BB1 = chooseTarget();
-    (*bi)->setSuccessor(0, BB1);
-    if ((*bi)->isConditional())
-      (*bi)->setSuccessor(1, chooseTarget(BB1));
+    bi->setSuccessor(0, BB1);
+    if (bi->isConditional())
+      bi->setSuccessor(1, chooseTarget(BB1));
   }
 
 // finally, fixup the Phis -- first by splitting any BBs where a non-Phi
 // precedes a Phi
 redo:
-  for (auto bb = F->begin(), bbe = F->end(); bb != bbe; ++bb) {
+  for (auto &bb : *F) {
     bool notphi = false;
-    for (auto i = bb->begin(), ie = bb->end(); i != ie; ++i) {
+    for (auto &i : bb) {
       if (!isa<PHINode>(i))
         notphi = true;
       if (notphi && isa<PHINode>(i)) {
-        i->getParent()->splitBasicBlock(i, "phisp");
+        i.getParent()->splitBasicBlock(i, "phisp");
         goto redo;
       }
     }

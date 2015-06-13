@@ -45,6 +45,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <sched.h>
+
 using namespace llvm;
 
 static const unsigned W = 3;  // width
@@ -69,6 +71,8 @@ static cl::opt<std::string> ForcedChoiceStr("choices",
                                             cl::desc("Force these choices"));
 static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
                             cl::init(true));
+static cl::opt<bool> RT("realtime", cl::desc("Use realtime priorities for parallel DFS"),
+                        cl::init(false));
 
 static std::vector<int> ForcedChoices;
 
@@ -94,13 +98,26 @@ static int __ensure_handler(const char *exp, const char *file, const int line) {
 #define ensure(x) ((void)(!(x) && __ensure_handler(#x, __FILE__, __LINE__)))
 
 static void exit_handler() {
-  // fprintf(stdout, "post\n");
-  // ensure(0 == sem_post(&Shmem->sem));
+  if (RT)
+    sem_post(&Shmem->sem);
+}
+
+static int Depth = 1;
+
+void setpri(void) {
+  struct sched_param s;
+  s.sched_priority = Depth;
+  ensure(0 == sched_setscheduler(0, SCHED_FIFO, &s));
 }
 
 static unsigned Choose(unsigned n) {
   ensure(n > 0);
+  ++Depth;
   if (!Fuzz) {
+    if (RT) {
+      ensure(Depth <= 99);
+      setpri();
+    }
     for (unsigned i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
       ensure(ret != -1);
@@ -109,9 +126,10 @@ static unsigned Choose(unsigned n) {
         Choices += std::to_string(i) + " ";
         return i;
       }
-      ::wait(0);
-      // fprintf(stdout, "wait %d\n", i);
-      // ensure(0 == sem_wait(&Shmem->sem));
+      if (RT)
+        ensure(0 == sem_wait(&Shmem->sem));
+      else
+        ::wait(0);
     }
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
@@ -410,10 +428,13 @@ int main(int argc, char **argv) {
       (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
                               MAP_SHARED | MAP_ANON, -1, 0);
   ensure(Shmem != MAP_FAILED);
-  // ensure(0 == sem_init(&Shmem->sem, 1, 4));
-  // ensure(0 == sem_init(&Shmem->sem, 1, 1));
   ensure(0 == atexit(exit_handler));
   Shmem->NextId = 1;
+
+  if (RT) {
+    ensure(0 == sem_init(&Shmem->sem, 1, 4));
+    setpri();
+  }
 
   Module *M = new Module("", getGlobalContext());
   C = &M->getContext();
@@ -434,7 +455,7 @@ int main(int argc, char **argv) {
 
   // action happens here
   Value *V = genVal(Budget, RetWidth, false, false);
-  // and now every BB has a terminator
+  // terminate the sole non-terminated BB
   Builder->CreateRet(V);
 
   // fixup branch targets

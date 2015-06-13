@@ -470,12 +470,13 @@ redo:
       BasicBlock *Pred = *PI;
       ensure(Budget == 0);
       Value *V =
-          genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
+        genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
       P->addIncoming(V, Pred);
     }
   }
 
-  // drop any program where we have a silly block that lacks predecessors
+  // drop any program where we have a non-entry BB that lacks predecessors;
+  // would be better to avoid creating these in the first place
   bool first = true;
   for (auto &bb : *F) {
     if (first) {

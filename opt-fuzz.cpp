@@ -352,7 +352,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   unsigned which = Choose(choices);
   if (which == Vs.size()) {
     Value *V = 0;
-    for (auto &it = F->arg_begin(); it != F->arg_end(); ++it) {
+    for (auto it = F->arg_begin(); it != F->arg_end(); ++it) {
       if (UsedArgs.find(it) == UsedArgs.end() &&
           it->getType()->getPrimitiveSizeInBits() == Width) {
         UsedArgs.insert(it);
@@ -461,7 +461,7 @@ redo:
   }
 
   // and second by giving them incoming edges
-  for (auto &p = inst_begin(F), pe = inst_end(F); p != pe; ++p) {
+  for (auto p = inst_begin(F), pe = inst_end(F); p != pe; ++p) {
     PHINode *P = dyn_cast<PHINode>(&*p);
     if (!P)
       continue;
@@ -472,6 +472,20 @@ redo:
       Value *V =
           genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
       P->addIncoming(V, Pred);
+    }
+  }
+
+  // drop any program where we have a silly block that lacks predecessors
+  bool first = true;
+  for (auto &bb : *F) {
+    if (first) {
+      first = false;
+    } else {
+      int p = 0;
+      for (pred_iterator PI = pred_begin(&bb), E = pred_end(&bb); PI != E; ++PI)
+        p++;
+      if (p == 0)
+        exit(0);
     }
   }
 

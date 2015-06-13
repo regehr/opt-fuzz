@@ -40,16 +40,16 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <semaphore.h>
 using namespace llvm;
 
-static const unsigned W = 32; // width
-static const int N = 5;      // number of instructions to generate
+static const unsigned W = 3;  // width
+static const int N = 3;       // number of instructions to generate
 static const int NumFiles = 1000;
-
-static const int Cpus = 4;
 
 static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp"),
                              cl::init(false));
@@ -61,8 +61,8 @@ static cl::opt<bool> NoUB("noub", cl::desc("Do not put UB flags on binops"),
 static cl::opt<bool> OneConst("oneconst",
                               cl::desc("Only use one constant value"),
                               cl::init(false));
-static cl::opt<bool> All("all", cl::desc("Generate all programs"),
-                         cl::init(false));
+static cl::opt<bool> Fuzz("fuzz", cl::desc("Generate one program instead of all of them"),
+                          cl::init(false));
 static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
 static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
 static cl::opt<std::string> ForcedChoiceStr("choices",
@@ -73,9 +73,9 @@ static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
 static std::vector<int> ForcedChoices;
 
 struct shared {
-  std::atomic_long Children;
   std::atomic_long NextId;
-} * Shmem;
+  sem_t sem;
+} *Shmem;
 static std::string Choices;
 static long Id;
 
@@ -83,31 +83,35 @@ static long Id;
  * custom assert handler since it's critical we decrease the process count
  * before exiting
  */
-static int __check_handler(const char *exp, const char *file, const int line) {
+static int __ensure_handler(const char *exp, const char *file, const int line) {
   std::string err = "Assertion `" + std::string(exp) + "` failed at line " +
                     std::to_string(line) + " of file " + std::string(file) +
                     " with choices: " + Choices + "\n";
   errs() << err;
-  --Shmem->Children;
   exit(-1);
 }
 
-#define check(x) ((void)(!(x) && __check_handler(#x, __FILE__, __LINE__)))
+#define ensure(x) ((void)(!(x) && __ensure_handler(#x, __FILE__, __LINE__)))
+
+static void exit_handler() {
+  // fprintf(stdout, "post\n");
+  // ensure(0 == sem_post(&Shmem->sem));
+}
 
 static unsigned Choose(unsigned n) {
-  check(n > 0);
-  if (All) {
+  ensure(n > 0);
+  if (!Fuzz) {
     for (unsigned i = 0; i < (n - 1); ++i) {
-      if (Shmem->Children >= Cpus)
-        ::wait(0);
       int ret = ::fork();
-      check(ret != -1);
+      ensure(ret != -1);
       if (ret == 0) {
         Id = Shmem->NextId.fetch_add(1);
-        ++Shmem->Children;
         Choices += std::to_string(i) + " ";
         return i;
       }
+      ::wait(0);
+      // fprintf(stdout, "wait %d\n", i);
+      // ensure(0 == sem_wait(&Shmem->sem));
     }
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
@@ -128,11 +132,6 @@ static Function *F;
 static std::set<Argument *> UsedArgs;
 static std::vector<BasicBlock *> BBs;
 static std::vector<BranchInst *> Branches;
-
-static void Done(void) {
-  --Shmem->Children;
-  exit(0);
-}
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK,
                      bool ArgOK = true);
@@ -347,13 +346,13 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   for (auto &it : Vals)
     if (it->getType()->getPrimitiveSizeInBits() == Width)
       Vs.push_back(it);
-  unsigned choices = Vs.size() + ArgOK ? 1 : 0;
+  unsigned choices = Vs.size() + (ArgOK ? 1 : 0);
   if (choices == 0)
-    Done();
+    exit(0);
   unsigned which = Choose(choices);
   if (which == Vs.size()) {
     Value *V = 0;
-    for (auto it = F->arg_begin(); it != F->arg_end(); ++it) {
+    for (auto &it = F->arg_begin(); it != F->arg_end(); ++it) {
       if (UsedArgs.find(it) == UsedArgs.end() &&
           it->getType()->getPrimitiveSizeInBits() == Width) {
         UsedArgs.insert(it);
@@ -362,7 +361,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
         break;
       }
     }
-    check(V);
+    ensure(V);
     return V;
   } else {
     return Vs.at(which);
@@ -402,7 +401,7 @@ int main(int argc, char **argv) {
   if (Seed == INT_MIN) {
     Seed = ::time(0) + ::getpid();
   } else {
-    if (All)
+    if (!Fuzz)
       report_fatal_error("can't supply a seed in exhaustive mode");
   }
   ::srand(Seed);
@@ -410,8 +409,10 @@ int main(int argc, char **argv) {
   Shmem =
       (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
                               MAP_SHARED | MAP_ANON, -1, 0);
-  check(Shmem != MAP_FAILED);
-  Shmem->Children = 0;
+  ensure(Shmem != MAP_FAILED);
+  // ensure(0 == sem_init(&Shmem->sem, 1, 4));
+  // ensure(0 == sem_init(&Shmem->sem, 1, 1));
+  ensure(0 == atexit(exit_handler));
   Shmem->NextId = 1;
 
   Module *M = new Module("", getGlobalContext());
@@ -460,14 +461,14 @@ redo:
   }
 
   // and second by giving them incoming edges
-  for (auto p = inst_begin(F), pe = inst_end(F); p != pe; ++p) {
+  for (auto &p = inst_begin(F), pe = inst_end(F); p != pe; ++p) {
     PHINode *P = dyn_cast<PHINode>(&*p);
     if (!P)
       continue;
     BasicBlock *BB = P->getParent();
     for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
       BasicBlock *Pred = *PI;
-      check(Budget == 0);
+      ensure(Budget == 0);
       Value *V =
           genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
       P->addIncoming(V, Pred);
@@ -482,7 +483,7 @@ redo:
   Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
 
-  if (All) {
+  if (!Fuzz) {
     std::stringstream ss;
     ss << "func" << std::to_string(Id);
     ::srand(::time(0) + ::getpid());
@@ -490,27 +491,21 @@ redo:
     std::string func = SS.str();
     func.replace(func.find("func"), 4, ss.str());
     int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
-    check(fd > 2);
+    ensure(fd > 2);
     /*
      * bad hack -- instead of locking the file we're going to count on an atomic
-     * write and abort if it doesn't work -- this works fine on Linux
+     * write and bail if it doesn't work -- this works fine on Linux
      */
     unsigned res = write(fd, func.c_str(), func.length());
-    check(res == func.length());
+    ensure(res == func.length());
     res = close(fd);
-    check(res == 0);
+    ensure(res == 0);
   } else {
     outs() << SS.str();
   }
 
   if (Id == 0) {
-    while (Shmem->Children > 0) {
-      if (Verbose)
-        errs() << "processes = " << Shmem->Children << "\n";
-      sleep(1);
-    }
-  } else {
-    --Shmem->Children;
+    // fixme wait for all children
   }
   return 0;
 }

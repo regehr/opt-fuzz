@@ -13,44 +13,44 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/CallGraphSCCPass.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LegacyPassNameParser.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/NoFolder.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/CFG.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Support/PrettyStackTrace.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
+#include <fcntl.h>
+#include <sched.h>
+#include <semaphore.h>
 #include <set>
 #include <sstream>
-#include <vector>
+#include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <semaphore.h>
-#include <sched.h>
+#include <vector>
 
 using namespace llvm;
 
-static const unsigned W = 3;  // width
-static const int N = 3;       // number of instructions to generate
+static const unsigned W = 3; // width
+static const int N = 3;      // number of instructions to generate
 static const int NumFiles = 1000;
 
 static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp"),
@@ -63,15 +63,17 @@ static cl::opt<bool> NoUB("noub", cl::desc("Do not put UB flags on binops"),
 static cl::opt<bool> OneConst("oneconst",
                               cl::desc("Only use one constant value"),
                               cl::init(false));
-static cl::opt<bool> Fuzz("fuzz", cl::desc("Generate one program instead of all of them"),
-                          cl::init(false));
+static cl::opt<bool>
+    Fuzz("fuzz", cl::desc("Generate one program instead of all of them"),
+         cl::init(false));
 static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
 static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
 static cl::opt<std::string> ForcedChoiceStr("choices",
                                             cl::desc("Force these choices"));
 static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
                             cl::init(true));
-static cl::opt<bool> RT("realtime", cl::desc("Use realtime priorities for parallel DFS"),
+static cl::opt<bool> RT("realtime",
+                        cl::desc("Use realtime priorities for parallel DFS"),
                         cl::init(false));
 
 static std::vector<int> ForcedChoices;
@@ -79,7 +81,7 @@ static std::vector<int> ForcedChoices;
 struct shared {
   std::atomic_long NextId;
   sem_t sem;
-} *Shmem;
+} * Shmem;
 static std::string Choices;
 static long Id;
 
@@ -397,7 +399,7 @@ static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   auto t = targets[Choose(targets.size())];
   Instruction *I = &*t;
   BasicBlock *BB;
-  if (I ==  &*I->getParent()->getFirstInsertionPt()) {
+  if (I == &*I->getParent()->getFirstInsertionPt()) {
     BB = I->getParent();
   } else {
     if (Verbose)
@@ -491,7 +493,7 @@ redo:
       BasicBlock *Pred = *PI;
       ensure(Budget == 0);
       Value *V =
-        genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
+          genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
       P->addIncoming(V, Pred);
     }
   }

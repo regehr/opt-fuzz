@@ -14,7 +14,7 @@ Any verification failure represents a bug in LLVM or Alive.
 
 Building opt-fuzz:
 
-First, checkout LLVM + Clang. Hopefully most any recent version will work,
-opt-fuzz was last tested against r239564. Second, checkout opt-fuzz in the tools
-directory. Third, configure, build, and install LLVM: opt-fuzz will be installed
-along with the rest of the LLVM tools.
+mkdir build
+cd build
+cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+

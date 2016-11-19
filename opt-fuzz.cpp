@@ -36,7 +36,6 @@
 #include <algorithm>
 #include <fcntl.h>
 #include <sched.h>
-#include <semaphore.h>
 #include <set>
 #include <sstream>
 #include <stdlib.h>
@@ -49,8 +48,8 @@
 
 using namespace llvm;
 
-static const unsigned W = 3; // width
-static const int N = 3;      // number of instructions to generate
+static const unsigned W = 1; // width
+static const int N = 4;      // number of instructions to generate
 static const int NumFiles = 1000;
 
 static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp"),
@@ -72,16 +71,12 @@ static cl::opt<std::string> ForcedChoiceStr("choices",
                                             cl::desc("Force these choices"));
 static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
                             cl::init(true));
-static cl::opt<bool> RT("realtime",
-                        cl::desc("Use realtime priorities for parallel DFS"),
-                        cl::init(false));
 
 static std::vector<int> ForcedChoices;
 
 struct shared {
   std::atomic_long NextId;
-  sem_t sem;
-} * Shmem;
+} *Shmem;
 static std::string Choices;
 static long Id;
 
@@ -99,11 +94,6 @@ static int __ensure_handler(const char *exp, const char *file, const int line) {
 
 #define ensure(x) ((void)(!(x) && __ensure_handler(#x, __FILE__, __LINE__)))
 
-static void exit_handler() {
-  if (RT)
-    sem_post(&Shmem->sem);
-}
-
 static int Depth = 1;
 
 void setpri(void) {
@@ -116,10 +106,6 @@ static unsigned Choose(unsigned n) {
   ensure(n > 0);
   ++Depth;
   if (!Fuzz) {
-    if (RT) {
-      ensure(Depth <= 99);
-      setpri();
-    }
     for (unsigned i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
       ensure(ret != -1);
@@ -128,10 +114,7 @@ static unsigned Choose(unsigned n) {
         Choices += std::to_string(i) + " ";
         return i;
       }
-      if (RT)
-        ensure(0 == sem_wait(&Shmem->sem));
-      else
-        ::wait(0);
+      ::wait(0);
     }
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
@@ -431,13 +414,7 @@ int main(int argc, char **argv) {
       (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
                               MAP_SHARED | MAP_ANON, -1, 0);
   ensure(Shmem != MAP_FAILED);
-  ensure(0 == atexit(exit_handler));
   Shmem->NextId = 1;
-
-  if (RT) {
-    ensure(0 == sem_init(&Shmem->sem, 1, 4));
-    setpri();
-  }
 
   Module *M = new Module("", C);
   std::vector<Type *> ArgsTy;

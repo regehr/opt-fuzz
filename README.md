@@ -12,19 +12,10 @@ The process is to generate a set of functions and then, for each:
   that the optimization was correct)
 Any verification failure represents a bug in LLVM or Alive.
 
-# Building on Linux
-
-opt-fuzz uses some Linux scheduler features to prioritize its
-execution in such a way that the search is more depth-first than
-breadth-first.  BFS fans out so widely that it will kill your machine.
+# Building
 
 ```
 mkdir build
 cd build
 cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
 ```
-
-# Warnings
-
-opt-fuzz uses fork() to
-

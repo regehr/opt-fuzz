@@ -82,35 +82,21 @@ struct shared {
 static std::string Choices;
 static long Id;
 
-/*
- * custom assert handler since it's critical we decrease the process count
- * before exiting
- */
-static int __ensure_handler(const char *exp, const char *file, const int line) {
-  std::string err = "Assertion `" + std::string(exp) + "` failed at line " +
-                    std::to_string(line) + " of file " + std::string(file) +
-                    " with choices: " + Choices + "\n";
-  errs() << err;
-  exit(-1);
-}
-
-#define ensure(x) ((void)(!(x) && __ensure_handler(#x, __FILE__, __LINE__)))
-
 static int Depth = 1;
 
 void setpri(void) {
   struct sched_param s;
   s.sched_priority = Depth;
-  ensure(0 == sched_setscheduler(0, SCHED_FIFO, &s));
+  assert(0 == sched_setscheduler(0, SCHED_FIFO, &s));
 }
 
 static unsigned Choose(unsigned n) {
-  ensure(n > 0);
+  assert(n > 0);
   ++Depth;
   if (!Fuzz) {
     for (unsigned i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
-      ensure(ret != -1);
+      assert(ret != -1);
       if (ret == 0) {
         Id = Shmem->NextId.fetch_add(1);
         Choices += std::to_string(i) + " ";
@@ -367,7 +353,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
         break;
       }
     }
-    ensure(V);
+    assert(V);
     return V;
   } else {
     return Vs.at(which);
@@ -415,7 +401,7 @@ int main(int argc, char **argv) {
   Shmem =
       (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
                               MAP_SHARED | MAP_ANON, -1, 0);
-  ensure(Shmem != MAP_FAILED);
+  assert(Shmem != MAP_FAILED);
   Shmem->NextId = 1;
 
   Module *M = new Module("", C);
@@ -470,7 +456,7 @@ redo:
     BasicBlock *BB = P->getParent();
     for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
       BasicBlock *Pred = *PI;
-      ensure(Budget == 0);
+      assert(Budget == 0);
       Value *V =
           genVal(Budget, P->getType()->getPrimitiveSizeInBits(), true, false);
       P->addIncoming(V, Pred);
@@ -508,15 +494,15 @@ redo:
     std::string func = SS.str();
     func.replace(func.find("func"), 4, ss.str());
     int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
-    ensure(fd > 2);
+    assert(fd > 2);
     /*
      * bad hack -- instead of locking the file we're going to count on an atomic
      * write and bail if it doesn't work -- this works fine on Linux
      */
     unsigned res = write(fd, func.c_str(), func.length());
-    ensure(res == func.length());
+    assert(res == func.length());
     res = close(fd);
-    ensure(res == 0);
+    assert(res == 0);
   } else {
     outs() << SS.str();
   }

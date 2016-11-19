@@ -48,12 +48,11 @@
 
 using namespace llvm;
 
-static cl::opt<int> W("width", cl::desc("Base integer width"),
-		      cl::init(2));
+static cl::opt<int> W("width", cl::desc("Base integer width"), cl::init(2));
 static cl::opt<int> N("num-insns", cl::desc("Number of instructions"),
-		      cl::init(2));
+                      cl::init(2));
 static cl::opt<int> NumFiles("num-files", cl::desc("Number of output files"),
-			     cl::init(1000));
+                             cl::init(1000));
 static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp"),
                              cl::init(false));
 static cl::opt<bool> OneBinop("onebinop",
@@ -78,7 +77,7 @@ static std::vector<int> ForcedChoices;
 
 struct shared {
   std::atomic_long NextId;
-} *Shmem;
+} * Shmem;
 static std::string Choices;
 static long Id;
 
@@ -505,10 +504,6 @@ redo:
     assert(res == 0);
   } else {
     outs() << SS.str();
-  }
-
-  if (Id == 0) {
-    // fixme wait for all children
   }
   return 0;
 }

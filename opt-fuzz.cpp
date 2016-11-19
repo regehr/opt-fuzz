@@ -48,10 +48,12 @@
 
 using namespace llvm;
 
-static const unsigned W = 1; // width
-static const int N = 4;      // number of instructions to generate
-static const int NumFiles = 1000;
-
+static cl::opt<int> W("width", cl::desc("Base integer width"),
+		      cl::init(2));
+static cl::opt<int> N("num-insns", cl::desc("Number of instructions"),
+		      cl::init(2));
+static cl::opt<int> NumFiles("num-files", cl::desc("Number of output files"),
+			     cl::init(1000));
 static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp"),
                              cl::init(false));
 static cl::opt<bool> OneBinop("onebinop",

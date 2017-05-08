@@ -383,6 +383,8 @@ int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
 
+  assert(W > 1);
+
   if (!ForcedChoiceStr.empty()) {
     std::stringstream ss(ForcedChoiceStr);
     copy(std::istream_iterator<int>(ss), std::istream_iterator<int>(),
@@ -411,8 +413,7 @@ int main(int argc, char **argv) {
     ArgsTy.push_back(IntegerType::getIntNTy(C, W / 2));
     ArgsTy.push_back(IntegerType::getIntNTy(C, W * 2));
   }
-  unsigned RetWidth = W;
-  auto FuncTy = FunctionType::get(Type::getIntNTy(C, RetWidth), ArgsTy, 0);
+  auto FuncTy = FunctionType::get(Type::getIntNTy(C, W), ArgsTy, 0);
   F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "func", M);
   BBs.push_back(BasicBlock::Create(C, "", F));
   Builder = new IRBuilder<NoFolder>(BBs[0]);
@@ -420,7 +421,7 @@ int main(int argc, char **argv) {
   Builder->SetInsertPoint(BBs[0]);
 
   // action happens here
-  Value *V = genVal(Budget, RetWidth, false, false);
+  Value *V = genVal(Budget, W, false, false);
   // terminate the sole non-terminated BB
   Builder->CreateRet(V);
 

@@ -1,9 +1,0 @@
-- avoid backward branches by default
-- write the program that elaborates compressed functions
-- would like a way to avoid adding branches and phis that break llvm
-- remove unused parameters
-
-- generate x-with-overflow calls and insert/extractvalue
-- generate load/store/alloca
-- generate calls to intrinsics
-- support pointer types

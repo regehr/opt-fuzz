@@ -25,10 +25,12 @@ cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYP
 # TODO
 
 - UB flag inference
-- Generate and test functions with branches
-- Generate x.with.overflow instructions
+- Debug branches
+- Optionally generate only forward branches
+- Generate x.with.overflow instructions and insertvalue/extractvalue
 - Generate integer intrinsics, popcount and similar, the same ones we
   added to Souper
+- Generate pointers/GEPs/allocas
 - A crazy idea: use Alive to compare new implementations of an
   optimization (e.g. NewGVN vs GVN). We could use Alive to find test
   cases where the old implementation generates weaker code (i.e., with

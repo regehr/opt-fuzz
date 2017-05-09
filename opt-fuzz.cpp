@@ -48,20 +48,22 @@
 
 using namespace llvm;
 
-static cl::opt<int> W("width", cl::desc("Base integer width"), cl::init(2));
-static cl::opt<int> N("num-insns", cl::desc("Number of instructions"),
+static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"), cl::init(2));
+static cl::opt<int> N("num-insns", cl::desc("Number of instructions (default=2)"),
                       cl::init(2));
-static cl::opt<int> NumFiles("num-files", cl::desc("Number of output files"),
+static cl::opt<bool> Branch("branches", cl::desc("Generate branches (default=false)"),
+                            cl::init(false));
+static cl::opt<int> NumFiles("num-files", cl::desc("Number of output files (default=1000)"),
                              cl::init(1000));
-static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp"),
+static cl::opt<bool> OneICmp("oneicmp", cl::desc("Only emit one kind of icmp (default=false)"),
                              cl::init(false));
 static cl::opt<bool> OneBinop("onebinop",
-                              cl::desc("Only emit one kind of binop"),
+                              cl::desc("Only emit one kind of binop (default=false)"),
                               cl::init(false));
-static cl::opt<bool> NoUB("noub", cl::desc("Do not put UB flags on binops"),
+static cl::opt<bool> NoUB("noub", cl::desc("Do not put UB flags on binops (default=false)"),
                           cl::init(false));
 static cl::opt<bool> OneConst("oneconst",
-                              cl::desc("Only use one constant value"),
+                              cl::desc("Only use one constant value (default=false)"),
                               cl::init(false));
 static cl::opt<bool>
     Fuzz("fuzz", cl::desc("Generate one program instead of all of them"),
@@ -133,7 +135,7 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
-  if (Budget > 0 && Choose(2)) {
+  if (Branch && Budget > 0 && Choose(2)) {
     if (Verbose)
       errs() << "adding a phi, budget = " << Budget << "\n";
     --Budget;
@@ -142,7 +144,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
-  if (Budget > 0 && Budget != N && Choose(2)) {
+  if (Branch && Budget > 0 && Budget != N && Choose(2)) {
     if (Verbose)
       errs() << "adding a branch, budget = " << Budget << "\n";
     --Budget;

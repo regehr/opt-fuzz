@@ -22,9 +22,8 @@ cd build
 cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
 ```
 
-#
+# TODO
 
-TODO:
 - UB flag inference
 - Generate and test functions with branches
 - Generate x.with.overflow instructions

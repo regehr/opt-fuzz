@@ -1,8 +1,8 @@
 # opt-fuzz
 
 This is a simple implementation of bounded exhaustive testing for LLVM
-programs. It is useful for testing optimizations. Although it could be used in a
-variety of ways, we are using it in conjunction with Alive:
+programs. It is useful for testing optimizations. Although it could be
+used in a variety of ways, we are using it in conjunction with Alive:
 
   https://github.com/nunoplopes/alive
 
@@ -13,6 +13,8 @@ The process is to generate a set of functions and then, for each:
 Any verification failure represents a bug in LLVM or Alive.
 
 # Building
+
+Prereq: Clang/LLVM 4.0 is installed and in the PATH.
 
 ```
 mkdir build

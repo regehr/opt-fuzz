@@ -69,6 +69,9 @@ static cl::opt<bool>
     NoUB("noub", cl::desc("Do not put UB flags on binops (default=false)"),
          cl::init(false));
 static cl::opt<bool>
+    Geni1("geni1", cl::desc("Functions return i1 instead of iN (default=false)"),
+         cl::init(false));
+static cl::opt<bool>
     FewConsts("fewconsts",
              cl::desc("Instead of trying all values of every constant, try a few selected constants (default=false)"),
              cl::init(false));
@@ -137,8 +140,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK,
 
 static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   L = genVal(Budget, Width, true);
-  bool Lconst = isa<Constant>(L) || isa<UndefValue>(L);
-  R = genVal(Budget, Width, !Lconst);
+  R = genVal(Budget, Width, !isa<Constant>(L) && !isa<UndefValue>(L));
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
@@ -240,7 +242,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Budget > 0 && Width == 1 && Choose(2)) {
-    unsigned OldW = Width;
+    unsigned OldW = W;
     if (Verbose)
       errs() << "adding a trunc from " << OldW << " to " << Width
              << " and budget = " << Budget << "\n";
@@ -464,15 +466,19 @@ int main(int argc, char **argv) {
     ArgsTy.push_back(IntegerType::getIntNTy(C, W / 2));
     ArgsTy.push_back(IntegerType::getIntNTy(C, W * 2));
   }
-  auto FuncTy = FunctionType::get(Type::getIntNTy(C, W), ArgsTy, 0);
+  auto FuncTy = FunctionType::get(Type::getIntNTy(C, Geni1 ? 1 : W), ArgsTy, 0);
   F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "func", M);
   BBs.push_back(BasicBlock::Create(C, "", F));
   Builder = new IRBuilder<NoFolder>(BBs[0]);
   int Budget = N;
   Builder->SetInsertPoint(BBs[0]);
 
-  // action happens here
-  Value *V = genVal(Budget, W, false, false);
+  // magic happens here
+  Value *V;
+  if (Geni1)
+    V = genVal(Budget, 1, false, false);
+  else
+    V = genVal(Budget, W, false, false);
   // terminate the sole non-terminated BB
   Builder->CreateRet(V);
 

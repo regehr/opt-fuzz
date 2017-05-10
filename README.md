@@ -24,6 +24,13 @@ cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYP
 
 # TODO
 
+- factor out budget > 0 checks
+- remove unused arguments before printing
+- look for cases where the folder fires despite us not wanting it to
+- optionally test the folder
+- optionally emit math on i1, iN/2 and i2*N?
+- Flatten the choice tree so that opt-fuzz works better as a fuzzer;
+  should suffice to do this just in GenVal
 - UB flag inference
 - Debug branches
 - Optionally generate only forward branches

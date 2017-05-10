@@ -356,6 +356,11 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
+  /*
+   * from this point on we're not generating instructions and hence
+   * not consuming budget
+   */
+
   if (ConstOK && Choose(2)) {
     if (Verbose)
       errs() << "adding a const with width = " << Width

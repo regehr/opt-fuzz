@@ -33,7 +33,7 @@ cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYP
   * pipe/semaphore
   * OS-supported limit on number of processes
 - implement Nuno's ideas about synthesizing good constants from Alive preconditions,
-  see his mail from May 20 1017
+  see his mail from May 20, 2017
 - factor out budget > 0 checks
 - remove unused arguments before printing
 - look for cases where the folder fires despite us not wanting it to

@@ -390,59 +390,52 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     }
   }
 
-  /*
-   * at this point we've declined to make a new Value to satisfy the
-   * request, so we'll need to use a previously created value (which
-   * we've happily kept track of in the Vals vector) of the correct
-   * width, or else refer to a function argument
-   *
-   * the function arguments are pre-populated because it's hard or
-   * impossible to change a function signature in LLVM
-   *
-   * there's some extra complixity because we don't want to
-   * gratuitously use the different function arguments just to use
-   * them -- we only want to choose among those that have already been
-   * used + the first not-yet-used one (among those with matching
-   * widths)
-   */
+  if (ArgOK && Choose(2)) {
+    /*
+     * refer to a function argument; the function arguments are
+     * pre-populated because it's hard to change a function signature
+     * in LLVM
+     *
+     * there's a bit of extra complixity here because we don't want to
+     * gratuitously use the different function arguments just to use
+     * them -- we only want to choose among those that have already
+     * been used + the first not-yet-used one (among those with
+     * matching widths)
+     */
+    if (Verbose)
+      errs() << "using function argument with width = " << Width << "\n";
+    std::vector<Value *> Vs;
+    bool found = false;
+    for (auto &it : F->args()) {
+      Argument *a = &it;
+      if (a->getType()->getPrimitiveSizeInBits() != Width)
+        continue;
+      Vs.push_back(a);
+      if (UsedArgs.find(a) == UsedArgs.end()) {
+        UsedArgs.insert(a);
+        found = true;
+        break;
+      }
+    }
+    /*
+     * this isn't supposed to happen since we attempt to pre-populate
+     * the function arguments conservatively
+     */
+    if (!found)
+      errs() << "Error: ran out of function arguments of width " << Width << "\n";
+    return Vs.at(Choose(Vs.size()));
+  }
+
   if (Verbose)
-    errs() << "using existing val with width = " << Width
-           << " and budget = " << Budget << " and ArgOK = " << ArgOK << "\n";
+    errs() << "using existing val with width = " << Width << "\n";
   std::vector<Value *> Vs;
   for (auto &it : Vals)
     if (it->getType()->getPrimitiveSizeInBits() == Width)
       Vs.push_back(it);
-  unsigned choices = Vs.size() + (ArgOK ? 1 : 0);
-  if (choices == 0) {
-    // under what circumstances can this happen?
+  // this can happen when no values have been created yet, no big deal
+  if (Vs.size() == 0)
     exit(0);
-  }
-  unsigned which = Choose(choices);
-  if (which == Vs.size()) {
-    /*
-     * refer to a function argument
-     * FIXME: there should be a choose() in here
-     */
-    Value *V = 0;
-    for (auto &it : F->args()) {
-      Argument *a = &it;
-      if (UsedArgs.find(a) == UsedArgs.end() &&
-          a->getType()->getPrimitiveSizeInBits() == Width) {
-        UsedArgs.insert(a);
-        V = a;
-        Vals.push_back(V);
-        break;
-      }
-    }
-    if (!V) {
-      errs() << "oops, can't find a function argument of width " << Width << "\n";
-    }
-    return V;
-  } else {
-    auto V = Vs.at(which);
-    assert(V);
-    return V;
-  }
+  return Vs.at(Choose(Vs.size()));
 }
 
 static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {

@@ -53,7 +53,7 @@ static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
 static cl::opt<int>
     N("num-insns", cl::desc("Number of instructions (default=2)"), cl::init(2));
 static cl::opt<bool> Branch("branches",
-                            cl::desc("Generate branches (default=false)"),
+                            cl::desc("Generate branches (default=false) (broken don't use)"),
                             cl::init(false));
 static cl::opt<int> NumFiles("num-files",
                              cl::desc("Number of output files (default=1000)"),
@@ -530,8 +530,10 @@ redo:
       int p = 0;
       for (pred_iterator PI = pred_begin(&bb), E = pred_end(&bb); PI != E; ++PI)
         p++;
-      if (p == 0)
+      if (p == 0) {
+        // under what circumstances can this happen?
         exit(0);
+      }
     }
   }
 

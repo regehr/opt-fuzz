@@ -264,7 +264,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
              << " and budget = " << Budget << "\n";
     --Budget;
     Instruction::BinaryOps Op;
-    switch (OneBinop ? 0 : Choose(10)) {
+    switch (OneBinop ? 0 : Choose(13)) {
     case 0:
       Op = Instruction::Add;
       break;
@@ -294,6 +294,15 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       break;
     case 9:
       Op = Instruction::Xor;
+      break;
+    case 10:
+      Op = Instruction::Shl;
+      break;
+    case 11:
+      Op = Instruction::AShr;
+      break;
+    case 12:
+      Op = Instruction::LShr;
       break;
     }
     Value *L, *R;
@@ -339,7 +348,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       case 3:
         return ConstantInt::get(C, APInt(Width, -1));
       case 4:
-        return ConstantInt::get(C, APInt(Width, 2));
+        return ConstantInt::get(C, APInt(Width, Shmem->NextId % (Width + 3)));
       case 5:
         return ConstantInt::get(C, APInt::getSignedMaxValue(Width));
       case 6:

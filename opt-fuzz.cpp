@@ -69,8 +69,8 @@ static cl::opt<bool>
     NoUB("noub", cl::desc("Do not put UB flags on binops (default=false)"),
          cl::init(false));
 static cl::opt<bool>
-    OneConst("oneconst",
-             cl::desc("Only use one constant value (default=false)"),
+    FewConsts("fewconsts",
+             cl::desc("Instead of trying all values of every constant, try a few selected constants (default=false)"),
              cl::init(false));
 static cl::opt<bool>
     Fuzz("fuzz", cl::desc("Generate one program instead of all of them"),
@@ -327,7 +327,26 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     if (Verbose)
       errs() << "adding a const with width = " << Width
              << " and budget = " << Budget << "\n";
-    if (OneConst) {
+    if (FewConsts) {
+      int n = Choose(7);
+      switch (n) {
+      case 0:
+        return UndefValue::get(Type::getIntNTy(C, Width));
+      case 1:
+        return ConstantInt::get(C, APInt(Width, 0));
+      case 2:
+        return ConstantInt::get(C, APInt(Width, 1));
+      case 3:
+        return ConstantInt::get(C, APInt(Width, -1));
+      case 4:
+        return ConstantInt::get(C, APInt(Width, 2));
+      case 5:
+        return ConstantInt::get(C, APInt::getSignedMaxValue(Width));
+      case 6:
+        return ConstantInt::get(C, APInt::getSignedMinValue(Width));
+      default:
+        assert(false);
+      }
       return ConstantInt::get(C, APInt(Width, 1));
     } else {
       int n = Choose((1 << Width) + 1);

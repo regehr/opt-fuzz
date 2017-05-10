@@ -24,6 +24,14 @@ cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYP
 
 # TODO
 
+- leave wide-bitwidth constants as symbolic, use Klee to cover
+  interesting cases in the optimizer; or try AFL, but again only
+  changing values of constants
+- revive the parallel DFS work; goal is to use many cores w/o being a
+  fork bomb; possible mechanisms
+  * priorities
+  * pipe/semaphore
+  * OS-supported limit on number of processes
 - factor out budget > 0 checks
 - remove unused arguments before printing
 - look for cases where the folder fires despite us not wanting it to

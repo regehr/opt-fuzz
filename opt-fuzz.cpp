@@ -95,11 +95,13 @@ static long Id;
 
 static int Depth = 1;
 
+#if 0
 void setpri(void) {
   struct sched_param s;
   s.sched_priority = Depth;
   assert(0 == sched_setscheduler(0, SCHED_FIFO, &s));
 }
+#endif
 
 static unsigned Choose(unsigned n) {
   assert(n > 0);
@@ -150,6 +152,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     --Budget;
     Value *V = Builder->CreatePHI(Type::getIntNTy(C, Width), N);
     Vals.push_back(V);
+    assert(V);
     return V;
   }
 
@@ -168,7 +171,9 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     BasicBlock *BB = BasicBlock::Create(C, "", F);
     BBs.push_back(BB);
     Builder->SetInsertPoint(BB);
-    return genVal(Budget, Width, ConstOK, ArgOK);
+    auto V = genVal(Budget, Width, ConstOK, ArgOK);
+    assert(V);
+    return V;
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
@@ -181,6 +186,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     Value *C = genVal(Budget, 1, false);
     Value *V = Builder->CreateSelect(C, L, R);
     Vals.push_back(V);
+    assert(V);
     return V;
   }
 
@@ -226,6 +232,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     }
     Value *V = Builder->CreateICmp(P, L, R);
     Vals.push_back(V);
+    assert(V);
     return V;
   }
 
@@ -238,6 +245,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(C, Width));
     Vals.push_back(V);
+    assert(V);
     return V;
   }
 
@@ -250,6 +258,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(C, 1));
     Vals.push_back(V);
+    assert(V);
     return V;
   }
 
@@ -343,6 +352,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       }
     }
     Vals.push_back(V);
+    assert(V);
     return V;
   }
 
@@ -380,6 +390,21 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     }
   }
 
+  /*
+   * at this point we've declined to make a new Value to satisfy the
+   * request, so we'll need to use a previously created value (which
+   * we've happily kept track of in the Vals vector) of the correct
+   * width, or else refer to a function argument
+   *
+   * the function arguments are pre-populated because it's hard or
+   * impossible to change a function signature in LLVM
+   *
+   * there's some extra complixity because we don't want to
+   * gratuitously use the different function arguments just to use
+   * them -- we only want to choose among those that have already been
+   * used + the first not-yet-used one (among those with matching
+   * widths)
+   */
   if (Verbose)
     errs() << "using existing val with width = " << Width
            << " and budget = " << Budget << " and ArgOK = " << ArgOK << "\n";
@@ -394,6 +419,10 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   }
   unsigned which = Choose(choices);
   if (which == Vs.size()) {
+    /*
+     * refer to a function argument
+     * FIXME: there should be a choose() in here
+     */
     Value *V = 0;
     for (auto &it : F->args()) {
       Argument *a = &it;
@@ -405,10 +434,14 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
         break;
       }
     }
-    assert(V);
+    if (!V) {
+      errs() << "oops, can't find a function argument of width " << Width << "\n";
+    }
     return V;
   } else {
-    return Vs.at(which);
+    auto V = Vs.at(which);
+    assert(V);
+    return V;
   }
 }
 
@@ -460,7 +493,7 @@ int main(int argc, char **argv) {
 
   Module *M = new Module("", C);
   std::vector<Type *> ArgsTy;
-  for (int i = 0; i < N + 1; ++i) {
+  for (int i = 0; i < N + 2; ++i) {
     ArgsTy.push_back(IntegerType::getIntNTy(C, W));
     ArgsTy.push_back(IntegerType::getIntNTy(C, 1));
     ArgsTy.push_back(IntegerType::getIntNTy(C, W / 2));

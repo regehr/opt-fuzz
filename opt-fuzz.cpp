@@ -188,7 +188,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
              << " and budget = " << Budget << "\n";
     --Budget;
     Value *L, *R;
-    genLR(L, R, Budget, Width);
+    genLR(L, R, Budget, W);
     CmpInst::Predicate P;
     switch (OneICmp ? 0 : Choose(10)) {
     case 0:
@@ -235,6 +235,18 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     --Budget;
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(C, Width));
+    Vals.push_back(V);
+    return V;
+  }
+
+  if (Budget > 0 && Width == 1 && Choose(2)) {
+    unsigned OldW = Width;
+    if (Verbose)
+      errs() << "adding a trunc from " << OldW << " to " << Width
+             << " and budget = " << Budget << "\n";
+    --Budget;
+    Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
+                                    Type::getIntNTy(C, 1));
     Vals.push_back(V);
     return V;
   }
@@ -374,8 +386,10 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     if (it->getType()->getPrimitiveSizeInBits() == Width)
       Vs.push_back(it);
   unsigned choices = Vs.size() + (ArgOK ? 1 : 0);
-  if (choices == 0)
+  if (choices == 0) {
+    // under what circumstances can this happen?
     exit(0);
+  }
   unsigned which = Choose(choices);
   if (which == Vs.size()) {
     Value *V = 0;

@@ -43,11 +43,14 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <semaphore.h>
 #include <unistd.h>
 #include <vector>
 
 using namespace llvm;
 
+static cl::opt<int> Cores("cores", cl::desc("Number of cores to use (default=1)"),
+                      cl::init(1));
 static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
                       cl::init(2));
 static cl::opt<int>
@@ -89,19 +92,17 @@ static std::vector<int> ForcedChoices;
 
 struct shared {
   std::atomic_long NextId;
+  sem_t Sem;
 } * Shmem;
 static std::string Choices;
 static long Id;
 
 static int Depth = 1;
 
-#if 0
-void setpri(void) {
-  struct sched_param s;
-  s.sched_priority = Depth;
-  assert(0 == sched_setscheduler(0, SCHED_FIFO, &s));
+static void my_exit(int code) {
+  sem_post(&Shmem->Sem);
+  exit(code);
 }
-#endif
 
 static unsigned Choose(unsigned n) {
   assert(n > 0);
@@ -115,7 +116,11 @@ static unsigned Choose(unsigned n) {
         Choices += std::to_string(i) + " ";
         return i;
       }
-      ::wait(0);
+      if (1) {
+        sem_wait(&Shmem->Sem);
+      } else {
+        ::wait(0);
+      }
     }
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
@@ -439,7 +444,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       Vs.push_back(it);
   // this can happen when no values have been created yet, no big deal
   if (Vs.size() == 0)
-    exit(0);
+    my_exit(0);
   return Vs.at(Choose(Vs.size()));
 }
 
@@ -488,6 +493,9 @@ int main(int argc, char **argv) {
                               MAP_SHARED | MAP_ANON, -1, 0);
   assert(Shmem != MAP_FAILED);
   Shmem->NextId = 1;
+  int res = sem_init(&Shmem->Sem, /*pshared=*/1, /*value=*/20);
+  if (res != 0)
+    abort();
 
   Module *M = new Module("", C);
   std::vector<Type *> ArgsTy;
@@ -563,7 +571,7 @@ redo:
         p++;
       if (p == 0) {
         // under what circumstances can this happen?
-        exit(0);
+        my_exit(0);
       }
     }
   }
@@ -596,5 +604,5 @@ redo:
   } else {
     outs() << SS.str();
   }
-  return 0;
+  my_exit(0);
 }

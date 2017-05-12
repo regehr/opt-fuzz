@@ -24,6 +24,8 @@ cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYP
 
 # TODO
 
+- either print bitcode instead of llvm assembly or else print
+  functions to named pipes running bzip2
 - leave wide-bitwidth constants as symbolic, use Klee to cover
   interesting cases in the optimizer; or try AFL, but again only
   changing values of constants

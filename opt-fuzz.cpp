@@ -500,7 +500,7 @@ int main(int argc, char **argv) {
   assert(Shmem != MAP_FAILED);
   Shmem->NextId = 1;
   if (::atexit(at_exit) != 0)
-    abort();  
+    abort();
 
   Module *M = new Module("", C);
   std::vector<Type *> ArgsTy;

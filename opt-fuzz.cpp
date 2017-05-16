@@ -43,14 +43,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <semaphore.h>
 #include <unistd.h>
 #include <vector>
 
 using namespace llvm;
 
-static cl::opt<int> Cores("cores", cl::desc("Number of cores to use (default=1)"),
-                      cl::init(1));
+static cl::opt<bool> Parallel("parallel", cl::desc("Use lots of cores (default=false)"),
+                              cl::init(false));
 static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
                       cl::init(2));
 static cl::opt<int>
@@ -92,16 +91,16 @@ static std::vector<int> ForcedChoices;
 
 struct shared {
   std::atomic_long NextId;
-  sem_t Sem;
+  std::atomic_long Processes;
 } * Shmem;
 static std::string Choices;
 static long Id;
 
 static int Depth = 1;
 
-static void my_exit(int code) {
-  sem_post(&Shmem->Sem);
-  exit(code);
+static void at_exit(void) {
+  if (Parallel)
+    Shmem->Proceses--;
 }
 
 static unsigned Choose(unsigned n) {
@@ -112,16 +111,23 @@ static unsigned Choose(unsigned n) {
       int ret = ::fork();
       assert(ret != -1);
       if (ret == 0) {
+        // child
+        if (Parallel) {
+          if (Shmem->Processes > 1000)
+            sleep(1);
+          Shmem->Processes++;
+        }
         Id = Shmem->NextId.fetch_add(1);
         Choices += std::to_string(i) + " ";
         return i;
       }
-      if (1) {
-        sem_wait(&Shmem->Sem);
-      } else {
+      // parent
+      if (!Parallel)
         ::wait(0);
-      }
     }
+    if (Parallel)
+      while (::wait(0) != -1)
+        ;
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
   } else if (!ForcedChoiceStr.empty()) {
@@ -444,7 +450,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       Vs.push_back(it);
   // this can happen when no values have been created yet, no big deal
   if (Vs.size() == 0)
-    my_exit(0);
+    exit(0);
   return Vs.at(Choose(Vs.size()));
 }
 
@@ -493,9 +499,8 @@ int main(int argc, char **argv) {
                               MAP_SHARED | MAP_ANON, -1, 0);
   assert(Shmem != MAP_FAILED);
   Shmem->NextId = 1;
-  int res = sem_init(&Shmem->Sem, /*pshared=*/1, /*value=*/20);
-  if (res != 0)
-    abort();
+  if (::atexit(at_exit) != 0)
+    abort();  
 
   Module *M = new Module("", C);
   std::vector<Type *> ArgsTy;
@@ -571,7 +576,7 @@ redo:
         p++;
       if (p == 0) {
         // under what circumstances can this happen?
-        my_exit(0);
+        exit(0);
       }
     }
   }
@@ -604,5 +609,5 @@ redo:
   } else {
     outs() << SS.str();
   }
-  my_exit(0);
+  return 0;
 }

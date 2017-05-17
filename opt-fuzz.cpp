@@ -91,17 +91,11 @@ static std::vector<int> ForcedChoices;
 
 struct shared {
   std::atomic_long NextId;
-  std::atomic_long Processes;
 } * Shmem;
 static std::string Choices;
 static long Id;
 
 static int Depth = 1;
-
-static void at_exit(void) {
-  if (Parallel)
-    Shmem->Processes--;
-}
 
 static unsigned Choose(unsigned n) {
   assert(n > 0);
@@ -109,25 +103,17 @@ static unsigned Choose(unsigned n) {
   if (!Fuzz) {
     for (unsigned i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
-      assert(ret != -1);
+      if(ret == -1)
+        ::abort();
       if (ret == 0) {
         // child
-        if (Parallel) {
-          if (Shmem->Processes > 1000)
-            sleep(1);
-          Shmem->Processes++;
-        }
         Id = Shmem->NextId.fetch_add(1);
         Choices += std::to_string(i) + " ";
         return i;
       }
       // parent
-      if (!Parallel)
-        ::wait(0);
+      ::wait(0);
     }
-    if (Parallel)
-      while (::wait(0) != -1)
-        ;
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
   } else if (!ForcedChoiceStr.empty()) {
@@ -478,7 +464,10 @@ int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
 
-  assert(W > 1);
+  if (W < 2) {
+    errs() << "Width must be >= 2\n";
+    ::abort();
+  }
 
   if (!ForcedChoiceStr.empty()) {
     std::stringstream ss(ForcedChoiceStr);
@@ -497,10 +486,11 @@ int main(int argc, char **argv) {
   Shmem =
       (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
                               MAP_SHARED | MAP_ANON, -1, 0);
-  assert(Shmem != MAP_FAILED);
+  if (Shmem == MAP_FAILED) {
+    errs() << "mmap failed\n";
+    ::abort();
+  }
   Shmem->NextId = 1;
-  if (::atexit(at_exit) != 0)
-    abort();
 
   Module *M = new Module("", C);
   std::vector<Type *> ArgsTy;
@@ -597,13 +587,19 @@ redo:
     std::string func = SS.str();
     func.replace(func.find("func"), 4, ss.str());
     int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
-    assert(fd > 2);
+    if (fd < 2) {
+      errs() << "open failed\n";
+      ::abort();
+    }
     /*
      * bad hack -- instead of locking the file we're going to count on an atomic
      * write and bail if it doesn't work -- this works fine on Linux
      */
     unsigned res = write(fd, func.c_str(), func.length());
-    assert(res == func.length());
+    if (res != func.length()) {
+      errs() << "non-atomic write\n";
+      ::abort();
+    }
     res = close(fd);
     assert(res == 0);
   } else {

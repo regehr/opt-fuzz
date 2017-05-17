@@ -100,7 +100,7 @@ static int Depth = 1;
 
 static void at_exit(void) {
   if (Parallel)
-    Shmem->Proceses--;
+    Shmem->Processes--;
 }
 
 static unsigned Choose(unsigned n) {

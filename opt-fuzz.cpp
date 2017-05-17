@@ -100,7 +100,7 @@ static int Depth = 1;
 
 static void at_exit(void) {
   if (Parallel)
-    Shmem->Proceses--;
+    Shmem->Processes--;
 }
 
 static unsigned Choose(unsigned n) {
@@ -517,13 +517,13 @@ int main(int argc, char **argv) {
   int Budget = N;
   Builder->SetInsertPoint(BBs[0]);
 
-  // magic happens here
+  // the magic happens in genVal()
   Value *V;
   if (Geni1)
     V = genVal(Budget, 1, false, false);
   else
     V = genVal(Budget, W, false, false);
-  // terminate the sole non-terminated BB
+  // terminate the only non-terminated BB
   Builder->CreateRet(V);
 
   // fixup branch targets

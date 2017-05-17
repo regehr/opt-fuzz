@@ -1,4 +1,4 @@
-//===-- opt-fuzz.cpp - Generate random LL files to stress-test LLVM ----===//
+//===-------- opt-fuzz.cpp - Generate LL files to stress-test LLVM --------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,8 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This program is a utility that generates random .ll files to stress-test
-// different components in LLVM.
+// This utility does bounded exhaustive generation of LLVM IR
+// functions containing integer instructions. These can be used to
+// stress-test different components of LLVM.
 //
 //===----------------------------------------------------------------------===//
 

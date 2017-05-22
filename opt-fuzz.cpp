@@ -145,7 +145,7 @@ static void increase_runners(int Depth) {
     abort();
   }
   assert(Shmem->Running <= Cores);
-  
+
   while (Shmem->Running >= Cores) {
     Shmem->Waiting[Depth]++;
     if (pthread_cond_wait(&Shmem->Cond[Depth], &Shmem->Lock)) {
@@ -527,7 +527,7 @@ static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   return BB;
 }
 
-static void generate(Module *&M) {  
+static void generate(Module *&M) {
   M = new Module("", C);
   std::vector<Type *> ArgsTy;
   for (int i = 0; i < N + 2; ++i) {
@@ -736,6 +736,6 @@ int main(int argc, char **argv) {
         errs() << "oops, there are waiting processes at " << i << "\n";
     }
   }
-  
+
   return 0;
 }

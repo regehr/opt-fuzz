@@ -114,12 +114,11 @@ static void decrease_runners(void) {
   }
 
   assert(Shmem->Running <= Cores);
-  
+
   Shmem->Running--;
   // FIXME could cache the max depth, perhaps don't care
   for (int i=MAX-1; i>=0; --i) {
     if (Shmem->Waiting[i] != 0) {
-      // outs() << "waking a depth " << i << "\n";
       Shmem->Waiting[i]--;
       if (pthread_cond_signal(&Shmem->Cond[i]) != 0) {
         errs() << "pthread_cond_signal failed\n";
@@ -149,14 +148,13 @@ static void increase_runners(int Depth) {
   
   while (Shmem->Running >= Cores) {
     Shmem->Waiting[Depth]++;
-    //errs() << "about to sleep at depth " << Depth << "\n";
     if (pthread_cond_wait(&Shmem->Cond[Depth], &Shmem->Lock)) {
       errs() << "pthread_cond_wait failed\n";
       ::abort();
     }
   }
-  
   Shmem->Running++;
+
   if (pthread_mutex_unlock(&Shmem->Lock) != 0) {
     errs() << "unlock failed\n";
     ::abort();
@@ -180,8 +178,8 @@ static unsigned Choose(unsigned n) {
         return i;
       }
       // parent
-      waitpid(-1, 0, WNOHANG);
       increase_runners(Depth);
+      waitpid(-1, 0, WNOHANG);
     }
     Choices += std::to_string(n - 1) + " ";
     return n - 1;

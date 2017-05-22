@@ -44,13 +44,14 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <vector>
 
 using namespace llvm;
 
-static cl::opt<bool> Parallel("parallel", cl::desc("Use lots of cores (default=false)"),
-                              cl::init(false));
+static cl::opt<int> Cores("cores", cl::desc("How many cores to use (default=1)"),
+                          cl::init(1));
 static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
                       cl::init(2));
 static cl::opt<int>
@@ -90,30 +91,97 @@ static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
 
 static std::vector<int> ForcedChoices;
 
+#define MAX 100
+
 struct shared {
   std::atomic_long NextId;
+  pthread_mutex_t Lock;
+  pthread_mutexattr_t LockAttr;
+  pthread_cond_t Cond[MAX];
+  int Waiting[MAX];
+  pthread_condattr_t CondAttr;
+  int Running;
 } * Shmem;
 static std::string Choices;
 static long Id;
 
 static int Depth = 1;
 
+static void decrease_runners(void) {
+  if (pthread_mutex_lock(&Shmem->Lock) != 0) {
+    errs() << "lock failed\n";
+    ::abort();
+  }
+
+  assert(Shmem->Running <= Cores);
+  
+  Shmem->Running--;
+  // FIXME could cache the max depth, perhaps don't care
+  for (int i=MAX-1; i>=0; --i) {
+    if (Shmem->Waiting[i] != 0) {
+      // outs() << "waking a depth " << i << "\n";
+      Shmem->Waiting[i]--;
+      if (pthread_cond_signal(&Shmem->Cond[i]) != 0) {
+        errs() << "pthread_cond_signal failed\n";
+        ::abort();
+      }
+      break;
+    }
+  }
+
+  if (pthread_mutex_unlock(&Shmem->Lock) != 0) {
+    errs() << "unlock failed\n";
+    ::abort();
+  }
+}
+
+static void increase_runners(int Depth) {
+  if (pthread_mutex_lock(&Shmem->Lock) != 0) {
+    errs() << "lock failed\n";
+    ::abort();
+  }
+
+  if (Depth >= MAX) {
+    errs() << "oops, rebuild opt-fuzz with a larger MAX\n";
+    abort();
+  }
+  assert(Shmem->Running <= Cores);
+  
+  while (Shmem->Running >= Cores) {
+    Shmem->Waiting[Depth]++;
+    //errs() << "about to sleep at depth " << Depth << "\n";
+    if (pthread_cond_wait(&Shmem->Cond[Depth], &Shmem->Lock)) {
+      errs() << "pthread_cond_wait failed\n";
+      ::abort();
+    }
+  }
+  
+  Shmem->Running++;
+  if (pthread_mutex_unlock(&Shmem->Lock) != 0) {
+    errs() << "unlock failed\n";
+    ::abort();
+  }
+}
+
 static unsigned Choose(unsigned n) {
   assert(n > 0);
-  ++Depth;
   if (!Fuzz) {
     for (unsigned i = 0; i < (n - 1); ++i) {
       int ret = ::fork();
-      if(ret == -1)
+      if(ret == -1) {
+        errs() << "fork failed\n";
         ::abort();
+      }
       if (ret == 0) {
         // child
         Id = Shmem->NextId.fetch_add(1);
         Choices += std::to_string(i) + " ";
+        ++Depth;
         return i;
       }
       // parent
-      ::wait(0);
+      waitpid(-1, 0, WNOHANG);
+      increase_runners(Depth);
     }
     Choices += std::to_string(n - 1) + " ";
     return n - 1;
@@ -461,39 +529,8 @@ static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   return BB;
 }
 
-int main(int argc, char **argv) {
-  PrettyStackTraceProgram X(argc, argv);
-  cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
-
-  if (W < 2) {
-    errs() << "Width must be >= 2\n";
-    ::abort();
-  }
-
-  if (!ForcedChoiceStr.empty()) {
-    std::stringstream ss(ForcedChoiceStr);
-    copy(std::istream_iterator<int>(ss), std::istream_iterator<int>(),
-         std::back_inserter(ForcedChoices));
-  }
-
-  if (Seed == INT_MIN) {
-    Seed = ::time(0) + ::getpid();
-  } else {
-    if (!Fuzz)
-      report_fatal_error("can't supply a seed in exhaustive mode");
-  }
-  ::srand(Seed);
-
-  Shmem =
-      (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
-                              MAP_SHARED | MAP_ANON, -1, 0);
-  if (Shmem == MAP_FAILED) {
-    errs() << "mmap failed\n";
-    ::abort();
-  }
-  Shmem->NextId = 1;
-
-  Module *M = new Module("", C);
+static void generate(Module *&M) {  
+  M = new Module("", C);
   std::vector<Type *> ArgsTy;
   for (int i = 0; i < N + 2; ++i) {
     ArgsTy.push_back(IntegerType::getIntNTy(C, W));
@@ -571,7 +608,9 @@ redo:
       }
     }
   }
+}
 
+void output(Module *M) {
   std::string SStr;
   raw_string_ostream SS(SStr);
   legacy::PassManager Passes;
@@ -606,5 +645,99 @@ redo:
   } else {
     outs() << SS.str();
   }
+}
+
+int main(int argc, char **argv) {
+  PrettyStackTraceProgram X(argc, argv);
+  cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
+
+  if (W < 2) {
+    errs() << "Width must be >= 2\n";
+    ::abort();
+  }
+
+  if (!ForcedChoiceStr.empty()) {
+    std::stringstream ss(ForcedChoiceStr);
+    copy(std::istream_iterator<int>(ss), std::istream_iterator<int>(),
+         std::back_inserter(ForcedChoices));
+  }
+
+  if (Seed == INT_MIN) {
+    Seed = ::time(0) + ::getpid();
+  } else {
+    if (!Fuzz)
+      report_fatal_error("can't supply a seed in exhaustive mode");
+  }
+  ::srand(Seed);
+
+  Shmem =
+      (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
+                              MAP_SHARED | MAP_ANON, -1, 0);
+  if (Shmem == MAP_FAILED) {
+    errs() << "mmap failed\n";
+    ::abort();
+  }
+  Shmem->NextId = 1;
+  Shmem->Running = 1;
+  if (pthread_mutexattr_init(&Shmem->LockAttr) != 0) {
+    errs() << "pthread_mutexattr_init failed\n";
+    ::abort();
+  }
+  if (pthread_mutexattr_setpshared(&Shmem->LockAttr, PTHREAD_PROCESS_SHARED) != 0) {
+    errs() << "pthread_mutexattr_setpshared failed\n";
+    ::abort();
+  }
+  if (pthread_mutex_init(&Shmem->Lock, &Shmem->LockAttr) != 0) {
+    errs() << "pthread_mutex_init failed\n";
+    ::abort();
+  }
+  if (pthread_condattr_init(&Shmem->CondAttr) != 0) {
+    errs() << "pthread_condattr_init failed\n";
+    ::abort();
+  }
+  if (pthread_condattr_setpshared(&Shmem->CondAttr, PTHREAD_PROCESS_SHARED) != 0) {
+    errs() << "pthread_condattr_setpshared failed\n";
+    ::abort();
+  }
+  for (int i=0; i<MAX; ++i) {
+    if (pthread_cond_init(&Shmem->Cond[i], &Shmem->CondAttr) != 0) {
+      errs() << "pthread_cond_init failed\n";
+      ::abort();
+    }
+    Shmem->Waiting[i] = 0;
+  }
+
+  int p[2];
+  pid_t original_pid = ::getpid();
+  if (atexit(decrease_runners) != 0) {
+    errs() << "atexit failed\n";
+    ::abort();
+  }
+  /*
+   * use a trick from stackoverflow to work around the fact that in
+   * UNIX we can only wait on our children, not our extended
+   * descendents: all descendents are going to inherit this pipe,
+   * implicitly closing its fds when they terminate. at that point
+   * reading from the pipe will not block but rather return with EOF
+   */
+  if (::pipe(p) != 0) {
+    errs() << "pipe failed??\n";
+    ::abort();
+  }
+
+  Module *M;
+  generate(M);
+  output(M);
+
+  if (::getpid() == original_pid) {
+    char buf[1];
+    ::close(p[1]);
+    ::read(p[0], buf, 1);
+    for (int i=0; i<MAX; i++) {
+      if (Shmem->Waiting[i] != 0)
+        errs() << "oops, there are waiting processes at " << i << "\n";
+    }
+  }
+  
   return 0;
 }

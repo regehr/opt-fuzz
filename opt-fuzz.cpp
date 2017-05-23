@@ -36,6 +36,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <fcntl.h>
+#include <pthread.h>
 #include <sched.h>
 #include <set>
 #include <sstream>
@@ -44,21 +45,21 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <pthread.h>
 #include <unistd.h>
 #include <vector>
 
 using namespace llvm;
 
-static cl::opt<int> Cores("cores", cl::desc("How many cores to use (default=1)"),
-                          cl::init(1));
+static cl::opt<int>
+    Cores("cores", cl::desc("How many cores to use (default=1)"), cl::init(1));
 static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
                       cl::init(2));
 static cl::opt<int>
     N("num-insns", cl::desc("Number of instructions (default=2)"), cl::init(2));
-static cl::opt<bool> Branch("branches",
-                            cl::desc("Generate branches (default=false) (broken don't use)"),
-                            cl::init(false));
+static cl::opt<bool>
+    Branch("branches",
+           cl::desc("Generate branches (default=false) (broken don't use)"),
+           cl::init(false));
 static cl::opt<int> NumFiles("num-files",
                              cl::desc("Number of output files (default=1000)"),
                              cl::init(1000));
@@ -73,12 +74,14 @@ static cl::opt<bool>
     NoUB("noub", cl::desc("Do not put UB flags on binops (default=false)"),
          cl::init(false));
 static cl::opt<bool>
-    Geni1("geni1", cl::desc("Functions return i1 instead of iN (default=false)"),
-         cl::init(false));
+    Geni1("geni1",
+          cl::desc("Functions return i1 instead of iN (default=false)"),
+          cl::init(false));
 static cl::opt<bool>
     FewConsts("fewconsts",
-             cl::desc("Instead of trying all values of every constant, try a few selected constants (default=false)"),
-             cl::init(false));
+              cl::desc("Instead of trying all values of every constant, try a "
+                       "few selected constants (default=false)"),
+              cl::init(false));
 static cl::opt<bool>
     Fuzz("fuzz", cl::desc("Generate one program instead of all of them"),
          cl::init(false));
@@ -95,8 +98,11 @@ static std::vector<int> ForcedChoices;
 
 #undef assert
 #define STRINGIFY(x) #x
-#define assert(expr) \
-  do { if (!(expr)) die(#expr " failed at line " STRINGIFY(__LINE__)); } while(0)
+#define assert(expr)                                                           \
+  do {                                                                         \
+    if (!(expr))                                                               \
+      die(#expr " failed at line " STRINGIFY(__LINE__));                       \
+  } while (0)
 
 struct shared {
   std::atomic_long NextId;
@@ -116,11 +122,10 @@ static bool Init = false;
 
 static void die(const char *str) {
   errs() << str << "ABORTING: \n";
-  // not checking return value here...
-  if (Init)
-    pthread_mutex_lock(&Shmem->Lock);
-  Shmem->Stop = 1;
   if (Init) {
+    // not checking return value here...
+    pthread_mutex_lock(&Shmem->Lock);
+    Shmem->Stop = 1;
     pthread_cond_broadcast(Shmem->Cond);
     pthread_mutex_unlock(&Shmem->Lock);
   }
@@ -135,7 +140,7 @@ static void decrease_runners(void) {
 
   Shmem->Running--;
   // FIXME could cache the max depth, perhaps don't care
-  for (int i=MAX-1; i>=0; --i) {
+  for (int i = MAX - 1; i >= 0; --i) {
     if (Shmem->Waiting[i] != 0) {
       Shmem->Waiting[i]--;
       if (pthread_cond_signal(&Shmem->Cond[i]) != 0)
@@ -178,7 +183,7 @@ static unsigned Choose(unsigned n) {
       if (Shmem->Stop)
         exit(-1);
       int ret = ::fork();
-      if(ret == -1)
+      if (ret == -1)
         die("fork failed");
       if (ret == 0) {
         // child
@@ -501,7 +506,8 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
      * the function arguments conservatively
      */
     if (!found)
-      errs() << "Error: ran out of function arguments of width " << Width << "\n";
+      errs() << "Error: ran out of function arguments of width " << Width
+             << "\n";
     return Vs.at(Choose(Vs.size()));
   }
 
@@ -681,15 +687,17 @@ int main(int argc, char **argv) {
   Shmem->Running = 1;
   if (pthread_mutexattr_init(&Shmem->LockAttr) != 0)
     die("pthread_mutexattr_init failed");
-  if (pthread_mutexattr_setpshared(&Shmem->LockAttr, PTHREAD_PROCESS_SHARED) != 0)
+  if (pthread_mutexattr_setpshared(&Shmem->LockAttr, PTHREAD_PROCESS_SHARED) !=
+      0)
     die("pthread_mutexattr_setpshared failed");
   if (pthread_mutex_init(&Shmem->Lock, &Shmem->LockAttr) != 0)
     die("pthread_mutex_init failed");
   if (pthread_condattr_init(&Shmem->CondAttr) != 0)
     die("pthread_condattr_init failed");
-  if (pthread_condattr_setpshared(&Shmem->CondAttr, PTHREAD_PROCESS_SHARED) != 0)
+  if (pthread_condattr_setpshared(&Shmem->CondAttr, PTHREAD_PROCESS_SHARED) !=
+      0)
     die("pthread_condattr_setpshared failed");
-  for (int i=0; i<MAX; ++i) {
+  for (int i = 0; i < MAX; ++i) {
     if (pthread_cond_init(&Shmem->Cond[i], &Shmem->CondAttr) != 0)
       die("pthread_cond_init failed");
     Shmem->Waiting[i] = 0;
@@ -718,7 +726,7 @@ int main(int argc, char **argv) {
     char buf[1];
     ::close(p[1]);
     ::read(p[0], buf, 1);
-    for (int i=0; i<MAX; i++) {
+    for (int i = 0; i < MAX; i++) {
       if (Shmem->Waiting[i] != 0)
         errs() << "oops, there are waiting processes at " << i << "\n";
     }

@@ -93,6 +93,11 @@ static std::vector<int> ForcedChoices;
 
 #define MAX 100
 
+#undef assert
+#define STRINGIFY(x) #x
+#define assert(expr) \
+  do { if (!(expr)) die(#expr " failed at line " STRINGIFY(__LINE__)); } while(0)
+
 struct shared {
   std::atomic_long NextId;
   pthread_mutex_t Lock;

@@ -101,17 +101,30 @@ struct shared {
   int Waiting[MAX];
   pthread_condattr_t CondAttr;
   int Running;
+  bool Stop;
 } * Shmem;
 static std::string Choices;
 static long Id;
 
 static int Depth = 1;
+static bool Init = false;
+
+static void die(const char *str) {
+  errs() << str << "ABORTING: \n";
+  // not checking return value here...
+  if (Init)
+    pthread_mutex_lock(&Shmem->Lock);
+  Shmem->Stop = 1;
+  if (Init) {
+    pthread_cond_broadcast(Shmem->Cond);
+    pthread_mutex_unlock(&Shmem->Lock);
+  }
+  exit(-1);
+}
 
 static void decrease_runners(void) {
-  if (pthread_mutex_lock(&Shmem->Lock) != 0) {
-    errs() << "lock failed\n";
-    ::abort();
-  }
+  if (pthread_mutex_lock(&Shmem->Lock) != 0)
+    die("lock failed");
 
   assert(Shmem->Running <= Cores);
 
@@ -120,56 +133,48 @@ static void decrease_runners(void) {
   for (int i=MAX-1; i>=0; --i) {
     if (Shmem->Waiting[i] != 0) {
       Shmem->Waiting[i]--;
-      if (pthread_cond_signal(&Shmem->Cond[i]) != 0) {
-        errs() << "pthread_cond_signal failed\n";
-        ::abort();
-      }
+      if (pthread_cond_signal(&Shmem->Cond[i]) != 0)
+        die("pthread_cond_signal failed");
       break;
     }
   }
 
-  if (pthread_mutex_unlock(&Shmem->Lock) != 0) {
-    errs() << "unlock failed\n";
-    ::abort();
-  }
+  if (pthread_mutex_unlock(&Shmem->Lock) != 0)
+    die("unlock failed");
 }
 
 static void increase_runners(int Depth) {
-  if (pthread_mutex_lock(&Shmem->Lock) != 0) {
-    errs() << "lock failed\n";
-    ::abort();
-  }
+  if (pthread_mutex_lock(&Shmem->Lock) != 0)
+    die("lock failed");
 
-  if (Depth >= MAX) {
-    errs() << "oops, rebuild opt-fuzz with a larger MAX\n";
-    abort();
-  }
+  if (Depth >= MAX)
+    die("oops, you'll need to rebuild opt-fuzz with a larger MAX");
   assert(Shmem->Running <= Cores);
 
   while (Shmem->Running >= Cores) {
     Shmem->Waiting[Depth]++;
-    if (pthread_cond_wait(&Shmem->Cond[Depth], &Shmem->Lock)) {
-      errs() << "pthread_cond_wait failed\n";
-      ::abort();
-    }
+    if (Shmem->Stop)
+      exit(-1);
+    if (pthread_cond_wait(&Shmem->Cond[Depth], &Shmem->Lock))
+      die("pthread_cond_wait failed");
+    if (Shmem->Stop)
+      exit(-1);
   }
   Shmem->Running++;
 
-  if (pthread_mutex_unlock(&Shmem->Lock) != 0) {
-    errs() << "unlock failed\n";
-    ::abort();
-  }
+  if (pthread_mutex_unlock(&Shmem->Lock) != 0)
+    die("unlock failed");
 }
 
 static unsigned Choose(unsigned n) {
   assert(n > 0);
   if (!Fuzz) {
     for (unsigned i = 0; i < (n - 1); ++i) {
+      if (Shmem->Stop)
+        exit(-1);
       int ret = ::fork();
-      if(ret == -1) {
-        errs() << "fork failed\n";
-        ::abort();
-      }
+      if(ret == -1)
+        die("fork failed");
       if (ret == 0) {
         // child
         Id = Shmem->NextId.fetch_add(1);
@@ -625,19 +630,15 @@ void output(Module *M) {
     std::string func = SS.str();
     func.replace(func.find("func"), 4, ss.str());
     int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
-    if (fd < 2) {
-      errs() << "open failed\n";
-      ::abort();
-    }
+    if (fd < 2)
+      die("open failed");
     /*
      * bad hack -- instead of locking the file we're going to count on an atomic
      * write and bail if it doesn't work -- this works fine on Linux
      */
     unsigned res = write(fd, func.c_str(), func.length());
-    if (res != func.length()) {
-      errs() << "non-atomic write\n";
-      ::abort();
-    }
+    if (res != func.length())
+      die("non-atomic write");
     res = close(fd);
     assert(res == 0);
   } else {
@@ -649,10 +650,8 @@ int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
 
-  if (W < 2) {
-    errs() << "Width must be >= 2\n";
-    ::abort();
-  }
+  if (W < 2)
+    die("Width must be >= 2");
 
   if (!ForcedChoiceStr.empty()) {
     std::stringstream ss(ForcedChoiceStr);
@@ -671,46 +670,31 @@ int main(int argc, char **argv) {
   Shmem =
       (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,
                               MAP_SHARED | MAP_ANON, -1, 0);
-  if (Shmem == MAP_FAILED) {
-    errs() << "mmap failed\n";
-    ::abort();
-  }
+  if (Shmem == MAP_FAILED)
+    die("mmap failed");
   Shmem->NextId = 1;
   Shmem->Running = 1;
-  if (pthread_mutexattr_init(&Shmem->LockAttr) != 0) {
-    errs() << "pthread_mutexattr_init failed\n";
-    ::abort();
-  }
-  if (pthread_mutexattr_setpshared(&Shmem->LockAttr, PTHREAD_PROCESS_SHARED) != 0) {
-    errs() << "pthread_mutexattr_setpshared failed\n";
-    ::abort();
-  }
-  if (pthread_mutex_init(&Shmem->Lock, &Shmem->LockAttr) != 0) {
-    errs() << "pthread_mutex_init failed\n";
-    ::abort();
-  }
-  if (pthread_condattr_init(&Shmem->CondAttr) != 0) {
-    errs() << "pthread_condattr_init failed\n";
-    ::abort();
-  }
-  if (pthread_condattr_setpshared(&Shmem->CondAttr, PTHREAD_PROCESS_SHARED) != 0) {
-    errs() << "pthread_condattr_setpshared failed\n";
-    ::abort();
-  }
+  if (pthread_mutexattr_init(&Shmem->LockAttr) != 0)
+    die("pthread_mutexattr_init failed");
+  if (pthread_mutexattr_setpshared(&Shmem->LockAttr, PTHREAD_PROCESS_SHARED) != 0)
+    die("pthread_mutexattr_setpshared failed");
+  if (pthread_mutex_init(&Shmem->Lock, &Shmem->LockAttr) != 0)
+    die("pthread_mutex_init failed");
+  if (pthread_condattr_init(&Shmem->CondAttr) != 0)
+    die("pthread_condattr_init failed");
+  if (pthread_condattr_setpshared(&Shmem->CondAttr, PTHREAD_PROCESS_SHARED) != 0)
+    die("pthread_condattr_setpshared failed");
   for (int i=0; i<MAX; ++i) {
-    if (pthread_cond_init(&Shmem->Cond[i], &Shmem->CondAttr) != 0) {
-      errs() << "pthread_cond_init failed\n";
-      ::abort();
-    }
+    if (pthread_cond_init(&Shmem->Cond[i], &Shmem->CondAttr) != 0)
+      die("pthread_cond_init failed");
     Shmem->Waiting[i] = 0;
   }
+  Init = 1;
 
   int p[2];
   pid_t original_pid = ::getpid();
-  if (atexit(decrease_runners) != 0) {
-    errs() << "atexit failed\n";
-    ::abort();
-  }
+  if (::atexit(decrease_runners) != 0)
+    die("atexit failed");
   /*
    * use a trick from stackoverflow to work around the fact that in
    * UNIX we can only wait on our children, not our extended
@@ -718,10 +702,8 @@ int main(int argc, char **argv) {
    * implicitly closing its fds when they terminate. at that point
    * reading from the pipe will not block but rather return with EOF
    */
-  if (::pipe(p) != 0) {
-    errs() << "pipe failed??\n";
-    ::abort();
-  }
+  if (::pipe(p) != 0)
+    die("pipe failed??");
 
   Module *M;
   generate(M);

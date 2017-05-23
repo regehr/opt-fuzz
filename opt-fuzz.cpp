@@ -94,7 +94,7 @@ static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
 
 static std::vector<int> ForcedChoices;
 
-#define MAX 100
+#define MAX_DEPTH 100
 
 #undef assert
 #define STRINGIFY(x) #x
@@ -108,8 +108,8 @@ struct shared {
   std::atomic_long NextId;
   pthread_mutex_t Lock;
   pthread_mutexattr_t LockAttr;
-  pthread_cond_t Cond[MAX];
-  int Waiting[MAX];
+  pthread_cond_t Cond[MAX_DEPTH];
+  int Waiting[MAX_DEPTH];
   pthread_condattr_t CondAttr;
   int Running;
   bool Stop;
@@ -121,13 +121,16 @@ static int Depth = 1;
 static bool Init = false;
 
 static void die(const char *str) {
-  errs() << str << "ABORTING: \n";
+  errs() << "ABORTING: " << str << "\n";
   if (Init) {
     // not checking return value here...
     pthread_mutex_lock(&Shmem->Lock);
-    Shmem->Stop = 1;
-    pthread_cond_broadcast(Shmem->Cond);
+    Shmem->Stop = true;
+    for (int i = 0; i < MAX_DEPTH; ++i)
+      pthread_cond_broadcast(&Shmem->Cond[i]);
     pthread_mutex_unlock(&Shmem->Lock);
+  } else {
+    Shmem->Stop = true;
   }
   exit(-1);
 }
@@ -140,7 +143,7 @@ static void decrease_runners(void) {
 
   Shmem->Running--;
   // FIXME could cache the max depth, perhaps don't care
-  for (int i = MAX - 1; i >= 0; --i) {
+  for (int i = MAX_DEPTH - 1; i >= 0; --i) {
     if (Shmem->Waiting[i] != 0) {
       Shmem->Waiting[i]--;
       if (pthread_cond_signal(&Shmem->Cond[i]) != 0)
@@ -157,18 +160,22 @@ static void increase_runners(int Depth) {
   if (pthread_mutex_lock(&Shmem->Lock) != 0)
     die("lock failed");
 
-  if (Depth >= MAX)
-    die("oops, you'll need to rebuild opt-fuzz with a larger MAX");
+  if (Depth >= MAX_DEPTH)
+    die("oops, you'll need to rebuild opt-fuzz with a larger MAX_DEPTH");
   assert(Shmem->Running <= Cores);
 
   while (Shmem->Running >= Cores) {
     Shmem->Waiting[Depth]++;
-    if (Shmem->Stop)
+    if (Shmem->Stop) {
+      pthread_mutex_unlock(&Shmem->Lock);
       exit(-1);
+    }
     if (pthread_cond_wait(&Shmem->Cond[Depth], &Shmem->Lock))
       die("pthread_cond_wait failed");
-    if (Shmem->Stop)
+    if (Shmem->Stop) {
+      pthread_mutex_unlock(&Shmem->Lock);
       exit(-1);
+    }
   }
   Shmem->Running++;
 
@@ -180,8 +187,10 @@ static unsigned Choose(unsigned n) {
   assert(n > 0);
   if (!Fuzz) {
     for (unsigned i = 0; i < (n - 1); ++i) {
-      if (Shmem->Stop)
+      if (Shmem->Stop) {
+        pthread_mutex_unlock(&Shmem->Lock);
         exit(-1);
+      }
       int ret = ::fork();
       if (ret == -1)
         die("fork failed");
@@ -697,7 +706,7 @@ int main(int argc, char **argv) {
   if (pthread_condattr_setpshared(&Shmem->CondAttr, PTHREAD_PROCESS_SHARED) !=
       0)
     die("pthread_condattr_setpshared failed");
-  for (int i = 0; i < MAX; ++i) {
+  for (int i = 0; i < MAX_DEPTH; ++i) {
     if (pthread_cond_init(&Shmem->Cond[i], &Shmem->CondAttr) != 0)
       die("pthread_cond_init failed");
     Shmem->Waiting[i] = 0;
@@ -726,7 +735,7 @@ int main(int argc, char **argv) {
     char buf[1];
     ::close(p[1]);
     ::read(p[0], buf, 1);
-    for (int i = 0; i < MAX; i++) {
+    for (int i = 0; i < MAX_DEPTH; i++) {
       if (Shmem->Waiting[i] != 0)
         errs() << "oops, there are waiting processes at " << i << "\n";
     }

@@ -52,44 +52,61 @@ using namespace llvm;
 
 static cl::opt<int>
     Cores("cores", cl::desc("How many cores to use (default=1)"), cl::init(1));
+
 static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
                       cl::init(2));
+
 static cl::opt<int>
     N("num-insns", cl::desc("Number of instructions (default=2)"), cl::init(2));
+
 static cl::opt<bool>
     Branch("branches",
            cl::desc("Generate branches (default=false) (broken don't use)"),
            cl::init(false));
+
 static cl::opt<int> NumFiles("num-files",
                              cl::desc("Number of output files (default=1000)"),
                              cl::init(1000));
+
 static cl::opt<bool>
     OneICmp("oneicmp", cl::desc("Only emit one kind of icmp (default=false)"),
             cl::init(false));
+
 static cl::opt<bool>
     OneBinop("onebinop",
              cl::desc("Only emit one kind of binop (default=false)"),
              cl::init(false));
+
 static cl::opt<bool>
     NoUB("noub", cl::desc("Do not put UB flags on binops (default=false)"),
          cl::init(false));
+
 static cl::opt<bool>
     Geni1("geni1",
           cl::desc("Functions return i1 instead of iN (default=false)"),
           cl::init(false));
+
 static cl::opt<bool>
     FewConsts("fewconsts",
               cl::desc("Instead of trying all values of every constant, try a "
                        "few selected constants (default=false)"),
               cl::init(false));
-static cl::opt<bool>
-    Fuzz("fuzz", cl::desc("Generate one program instead of all of them"),
-         cl::init(false));
-static cl::opt<bool> Verbose("v", cl::desc("Verbose output"), cl::init(false));
+
+static cl::opt<bool> Fuzz(
+    "fuzz",
+    cl::desc("Generate one program instead of all of them (default=false)"),
+    cl::init(false));
+
+static cl::opt<bool> Verbose("v", cl::desc("Verbose output (default=false)"),
+                             cl::init(false));
+
 static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
+
 static cl::opt<std::string> ForcedChoiceStr("choices",
                                             cl::desc("Force these choices"));
-static cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier"),
+
+static cl::opt<bool> Verify("verify",
+                            cl::desc("Run the LLVM verifier (default=true)"),
                             cl::init(true));
 
 static std::vector<int> ForcedChoices;
@@ -231,6 +248,11 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK,
 static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   L = genVal(Budget, Width, true);
   R = genVal(Budget, Width, !isa<Constant>(L) && !isa<UndefValue>(L));
+  if ((::getpid() & 1) == 0) {
+    Value *T = L;
+    L = R;
+    R = T;
+  }
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {

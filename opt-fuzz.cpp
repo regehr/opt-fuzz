@@ -234,7 +234,12 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
-  if (Branch && Budget > 0 && Choose(2)) {
+  /*
+   * generating a phi triggers generation of an extra basic block, and
+   * also a branch choosing between them; we'll choose to use budget
+   * for the phi but not for the branch
+   */
+  if (Branch && Budget > 1 && Choose(2)) {
     if (Verbose)
       errs() << "adding a phi, budget = " << Budget << "\n";
     --Budget;
@@ -244,6 +249,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
+  // FIXME fold into previous code
   if (Branch && Budget > 0 && Budget != N && Choose(2)) {
     if (Verbose)
       errs() << "adding a branch, budget = " << Budget << "\n";
@@ -577,6 +583,8 @@ static void generate(Module *&M) {
   // terminate the only non-terminated BB
   Builder->CreateRet(V);
 
+  /////////////////// FIXME /////////////////////
+  
   // fixup branch targets
   for (auto &bi : Branches) {
     BasicBlock *BB1 = chooseTarget();
@@ -631,6 +639,8 @@ redo:
       }
     }
   }
+
+  ///////////////// END FIXME ////////////////////
 }
 
 void output(Module *M) {

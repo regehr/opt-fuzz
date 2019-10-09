@@ -301,7 +301,10 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       errs() << "adding unary op with width = " << Width
              << " and budget = " << Budget << "\n";
     --Budget;
-    Value *A = genVal(Budget, Width, true);
+    std::vector<Value *> A;
+    std::vector<Type *> T;
+    A.push_back(genVal(Budget, Width, false));
+    T.push_back(A[0]->getType());
     Intrinsic::ID ID;
     switch (Choose(5)) {
     case 0:
@@ -318,13 +321,15 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       ID = Intrinsic::bswap;
       break;
     case 3:
+      A.push_back(Builder->getInt1(Choose(2)));
       ID = Intrinsic::ctlz;
       break;
     case 4:
+      A.push_back(Builder->getInt1(Choose(2)));
       ID = Intrinsic::cttz;
       break;
     }
-    Value *V = Builder->CreateUnaryIntrinsic(ID, A);
+    Value *V = Builder->CreateIntrinsic(ID, T, A);
     Vals.push_back(V);
     assert(V);
     return V;

@@ -559,7 +559,7 @@ static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   auto i = inst_begin(F), ie = inst_end(F);
   ++i;
   for (; i != ie; ++i)
-    if (!isa<TerminatorInst>(*i))
+    if (!i->isTerminator())
       targets.push_back(i);
   auto t = targets[Choose(targets.size())];
   Instruction *I = &*t;

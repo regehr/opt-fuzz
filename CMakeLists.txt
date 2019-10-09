@@ -1,7 +1,7 @@
 # adapted a bit from http://llvm.org/docs/CMake.html#embedding-llvm-in-your-project
 
 cmake_minimum_required(VERSION 3.2)
-project(IntervalBitwise)
+project(OptFuzz)
 
 find_package(LLVM REQUIRED CONFIG)
 

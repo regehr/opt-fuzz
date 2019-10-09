@@ -102,14 +102,9 @@ static cl::opt<bool> Verbose("v", cl::desc("Verbose output (default=false)"),
 
 static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
 
-static cl::opt<std::string> ForcedChoiceStr("choices",
-                                            cl::desc("Force these choices"));
-
 static cl::opt<bool> Verify("verify",
                             cl::desc("Run the LLVM verifier (default=true)"),
                             cl::init(true));
-
-static std::vector<int> ForcedChoices;
 
 #define MAX_DEPTH 100
 
@@ -708,12 +703,6 @@ int main(int argc, char **argv) {
 
   if (W < 2)
     die("Width must be >= 2");
-
-  if (!ForcedChoiceStr.empty()) {
-    std::stringstream ss(ForcedChoiceStr);
-    copy(std::istream_iterator<int>(ss), std::istream_iterator<int>(),
-         std::back_inserter(ForcedChoices));
-  }
 
   if (Seed == INT_MIN) {
     Seed = ::time(0) + ::getpid();

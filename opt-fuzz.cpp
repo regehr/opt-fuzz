@@ -64,6 +64,11 @@ static cl::opt<bool>
            cl::desc("Generate branches (default=false) (broken don't use)"),
            cl::init(false));
 
+static cl::opt<bool>
+    UseIntrinsics("use-intrinsics",
+           cl::desc("Generate intrinsics like ctpop (default=true)"),
+           cl::init(true));
+
 static cl::opt<int> NumFiles("num-files",
                              cl::desc("Number of output files (default=1000)"),
                              cl::init(1000));
@@ -91,11 +96,6 @@ static cl::opt<bool>
               cl::desc("Instead of trying all values of every constant, try a "
                        "few selected constants (default=false)"),
               cl::init(false));
-
-static cl::opt<bool> Fuzz(
-    "fuzz",
-    cl::desc("Generate one program instead of all of them (default=false)"),
-    cl::init(false));
 
 static cl::opt<bool> Verbose("v", cl::desc("Verbose output (default=false)"),
                              cl::init(false));
@@ -202,36 +202,27 @@ static void increase_runners(int Depth) {
 
 static unsigned Choose(unsigned n) {
   assert(n > 0);
-  if (!Fuzz) {
-    for (unsigned i = 0; i < (n - 1); ++i) {
-      if (Shmem->Stop) {
-        pthread_mutex_unlock(&Shmem->Lock);
-        exit(-1);
-      }
-      int ret = ::fork();
-      if (ret == -1)
-        die("fork failed");
-      if (ret == 0) {
-        // child
-        Id = Shmem->NextId.fetch_add(1);
-        Choices += std::to_string(i) + " ";
-        ++Depth;
-        return i;
-      }
-      // parent
-      increase_runners(Depth);
-      waitpid(-1, 0, WNOHANG);
+  for (unsigned i = 0; i < (n - 1); ++i) {
+    if (Shmem->Stop) {
+      pthread_mutex_unlock(&Shmem->Lock);
+      exit(-1);
     }
-    Choices += std::to_string(n - 1) + " ";
-    return n - 1;
-  } else if (!ForcedChoiceStr.empty()) {
-    static unsigned Choice = 0;
-    return ForcedChoices[Choice++];
-  } else {
-    unsigned i = rand() % n;
-    Choices += std::to_string(i) + " ";
-    return i;
+    int ret = ::fork();
+    if (ret == -1)
+      die("fork failed");
+    if (ret == 0) {
+      // child
+      Id = Shmem->NextId.fetch_add(1);
+      Choices += std::to_string(i) + " ";
+      ++Depth;
+      return i;
+    }
+    // parent
+    increase_runners(Depth);
+    waitpid(-1, 0, WNOHANG);
   }
+  Choices += std::to_string(n - 1) + " ";
+  return n - 1;
 }
 
 static IRBuilder<NoFolder> *Builder;
@@ -253,6 +244,17 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
     L = R;
     R = T;
   }
+}
+
+// true pseudorandom, not BET
+static APInt randAPInt(int Width) {
+  APInt Val(Width, 0);
+  for (int i = 0; i < Width; ++i) {
+    Val <<= 1;
+    if (rand() < (RAND_MAX / 2))
+      Val |= 1;
+  }
+  return Val;
 }
 
 static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
@@ -286,6 +288,18 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
+  if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
+    if (Verbose)
+      errs() << "adding unary op with width = " << Width
+             << " and budget = " << Budget << "\n";
+    --Budget;
+    Value *A = genVal(Budget, Width, true);
+    Value *V = Builder->CreateUnaryIntrinsic(Intrinsic::ctpop, A);
+    Vals.push_back(V);
+    assert(V);
+    return V;
+  }
+  
   if (Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
       errs() << "adding a select with width = " << Width
@@ -476,7 +490,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       errs() << "adding a const with width = " << Width
              << " and budget = " << Budget << "\n";
     if (FewConsts) {
-      int n = Choose(7);
+      int n = Choose(9);
       switch (n) {
       case 0:
         return UndefValue::get(Type::getIntNTy(C, Width));
@@ -487,11 +501,15 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       case 3:
         return ConstantInt::get(C, APInt(Width, -1));
       case 4:
-        return ConstantInt::get(C, APInt(Width, Shmem->NextId % (Width + 3)));
+        return ConstantInt::get(C, randAPInt(Width));
       case 5:
         return ConstantInt::get(C, APInt::getSignedMaxValue(Width));
       case 6:
         return ConstantInt::get(C, APInt::getSignedMinValue(Width));
+      case 7:
+        return ConstantInt::get(C, APInt(Width, 2));
+      case 8:
+        return ConstantInt::get(C, APInt(Width, (rand()%(2*Width))-Width));
       default:
         assert(false);
       }
@@ -664,28 +682,24 @@ void output(Module *M) {
   Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
 
-  if (!Fuzz) {
-    std::stringstream ss;
-    ss << "func" << std::to_string(Id);
-    ::srand(::time(0) + ::getpid());
-    std::string FN = std::to_string(rand() % NumFiles) + ".ll";
-    std::string func = SS.str();
-    func.replace(func.find("func"), 4, ss.str());
-    int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
-    if (fd < 2)
-      die("open failed");
-    /*
-     * bad hack -- instead of locking the file we're going to count on an atomic
-     * write and bail if it doesn't work -- this works fine on Linux
-     */
-    unsigned res = write(fd, func.c_str(), func.length());
-    if (res != func.length())
-      die("non-atomic write");
-    res = close(fd);
-    assert(res == 0);
-  } else {
-    outs() << SS.str();
-  }
+  std::stringstream ss;
+  ss << "func" << std::to_string(Id);
+  ::srand(::time(0) + ::getpid());
+  std::string FN = std::to_string(rand() % NumFiles) + ".ll";
+  std::string func = SS.str();
+  func.replace(func.find("func"), 4, ss.str());
+  int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
+  if (fd < 2)
+    die("open failed");
+  /*
+   * bad hack -- instead of locking the file we're going to count on an atomic
+   * write and bail if it doesn't work -- this works fine on Linux
+   */
+  unsigned res = write(fd, func.c_str(), func.length());
+  if (res != func.length())
+    die("non-atomic write");
+  res = close(fd);
+  assert(res == 0);
 }
 
 int main(int argc, char **argv) {
@@ -704,8 +718,7 @@ int main(int argc, char **argv) {
   if (Seed == INT_MIN) {
     Seed = ::time(0) + ::getpid();
   } else {
-    if (!Fuzz)
-      report_fatal_error("can't supply a seed in exhaustive mode");
+    report_fatal_error("can't supply a seed in exhaustive mode");
   }
   ::srand(Seed);
 

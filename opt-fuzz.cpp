@@ -102,8 +102,6 @@ cl::opt<bool>
 cl::opt<bool> Verbose("v", cl::desc("Verbose output (default=false)"),
                              cl::init(false));
 
-cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
-
 cl::opt<bool> Verify("verify",
                             cl::desc("Run the LLVM verifier (default=true)"),
                             cl::init(true));
@@ -719,7 +717,6 @@ void output(Module *M) {
 
   std::stringstream ss;
   ss << "func" << std::to_string(Id);
-  ::srand(::time(0) + ::getpid());
   std::string FN = std::to_string(rand() % NumFiles) + ".ll";
   std::string func = SS.str();
   func.replace(func.find("func"), 4, ss.str());
@@ -727,7 +724,7 @@ void output(Module *M) {
   if (fd < 2)
     die("open failed");
   /*
-   * bad hack -- instead of locking the file we're going to count on an atomic
+   * fun hack -- instead of locking the file we're going to count on an atomic
    * write and bail if it doesn't work -- this works fine on Linux
    */
   unsigned res = write(fd, func.c_str(), func.length());
@@ -745,13 +742,6 @@ int main(int argc, char **argv) {
 
   if (W < 2)
     die("Width must be >= 2");
-
-  if (Seed == INT_MIN) {
-    Seed = ::time(0) + ::getpid();
-  } else {
-    report_fatal_error("can't supply a seed in exhaustive mode");
-  }
-  ::srand(Seed);
 
   Shmem =
       (struct shared *)::mmap(0, sizeof(struct shared), PROT_READ | PROT_WRITE,

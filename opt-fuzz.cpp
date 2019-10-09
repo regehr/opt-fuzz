@@ -50,59 +50,61 @@
 
 using namespace llvm;
 
-static cl::opt<int>
+namespace {
+
+cl::opt<int>
     Cores("cores", cl::desc("How many cores to use (default=1)"), cl::init(1));
 
-static cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
+cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
                       cl::init(2));
 
-static cl::opt<int>
+cl::opt<int>
     N("num-insns", cl::desc("Number of instructions (default=2)"), cl::init(2));
 
-static cl::opt<bool>
+cl::opt<bool>
     Branch("branches",
            cl::desc("Generate branches (default=false) (broken don't use)"),
            cl::init(false));
 
-static cl::opt<bool>
+cl::opt<bool>
     UseIntrinsics("use-intrinsics",
            cl::desc("Generate intrinsics like ctpop (default=true)"),
            cl::init(true));
 
-static cl::opt<int> NumFiles("num-files",
+cl::opt<int> NumFiles("num-files",
                              cl::desc("Number of output files (default=1000)"),
                              cl::init(1000));
 
-static cl::opt<bool>
+cl::opt<bool>
     OneICmp("oneicmp", cl::desc("Only emit one kind of icmp (default=false)"),
             cl::init(false));
 
-static cl::opt<bool>
+cl::opt<bool>
     OneBinop("onebinop",
              cl::desc("Only emit one kind of binop (default=false)"),
              cl::init(false));
 
-static cl::opt<bool>
+cl::opt<bool>
     NoUB("noub", cl::desc("Do not put UB flags on binops (default=false)"),
          cl::init(false));
 
-static cl::opt<bool>
+cl::opt<bool>
     Geni1("geni1",
           cl::desc("Functions return i1 instead of iN (default=false)"),
           cl::init(false));
 
-static cl::opt<bool>
+cl::opt<bool>
     FewConsts("fewconsts",
               cl::desc("Instead of trying all values of every constant, try a "
                        "few selected constants (default=false)"),
               cl::init(false));
 
-static cl::opt<bool> Verbose("v", cl::desc("Verbose output (default=false)"),
+cl::opt<bool> Verbose("v", cl::desc("Verbose output (default=false)"),
                              cl::init(false));
 
-static cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
+cl::opt<int> Seed("seed", cl::desc("PRNG seed"), cl::init(INT_MIN));
 
-static cl::opt<bool> Verify("verify",
+cl::opt<bool> Verify("verify",
                             cl::desc("Run the LLVM verifier (default=true)"),
                             cl::init(true));
 
@@ -126,13 +128,13 @@ struct shared {
   int Running;
   bool Stop;
 } * Shmem;
-static std::string Choices;
-static long Id;
+std::string Choices;
+long Id;
 
-static int Depth = 1;
-static bool Init = false;
+int Depth = 1;
+bool Init = false;
 
-static void die(const char *str) {
+void die(const char *str) {
   errs() << "ABORTING: " << str << "\n";
   if (Init) {
     // not checking return value here...
@@ -147,7 +149,7 @@ static void die(const char *str) {
   exit(-1);
 }
 
-static void decrease_runners(void) {
+void decrease_runners(void) {
   if (pthread_mutex_lock(&Shmem->Lock) != 0)
     die("lock failed");
 
@@ -168,7 +170,7 @@ static void decrease_runners(void) {
     die("unlock failed");
 }
 
-static void increase_runners(int Depth) {
+void increase_runners(int Depth) {
   if (pthread_mutex_lock(&Shmem->Lock) != 0)
     die("lock failed");
 
@@ -195,7 +197,7 @@ static void increase_runners(int Depth) {
     die("unlock failed");
 }
 
-static unsigned Choose(unsigned n) {
+unsigned Choose(unsigned n) {
   assert(n > 0);
   for (unsigned i = 0; i < (n - 1); ++i) {
     if (Shmem->Stop) {
@@ -210,6 +212,7 @@ static unsigned Choose(unsigned n) {
       Id = Shmem->NextId.fetch_add(1);
       Choices += std::to_string(i) + " ";
       ++Depth;
+      ::srand(::getpid());
       return i;
     }
     // parent
@@ -220,18 +223,18 @@ static unsigned Choose(unsigned n) {
   return n - 1;
 }
 
-static IRBuilder<NoFolder> *Builder;
-static LLVMContext C;
-static std::vector<Value *> Vals;
-static Function *F;
-static std::set<Argument *> UsedArgs;
-static std::vector<BasicBlock *> BBs;
-static std::vector<BranchInst *> Branches;
+IRBuilder<NoFolder> *Builder;
+LLVMContext C;
+std::vector<Value *> Vals;
+Function *F;
+std::set<Argument *> UsedArgs;
+std::vector<BasicBlock *> BBs;
+std::vector<BranchInst *> Branches;
 
-static Value *genVal(int &Budget, unsigned Width, bool ConstOK,
+Value *genVal(int &Budget, unsigned Width, bool ConstOK,
                      bool ArgOK = true);
 
-static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
+void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
   L = genVal(Budget, Width, true);
   R = genVal(Budget, Width, !isa<Constant>(L) && !isa<UndefValue>(L));
   if ((::getpid() & 1) == 0) {
@@ -242,7 +245,7 @@ static void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
 }
 
 // true pseudorandom, not BET
-static APInt randAPInt(int Width) {
+APInt randAPInt(int Width) {
   APInt Val(Width, 0);
   for (int i = 0; i < Width; ++i) {
     Val <<= 1;
@@ -252,7 +255,17 @@ static APInt randAPInt(int Width) {
   return Val;
 }
 
-static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
+bool okForBitIntrinsic(unsigned W) {
+  return
+    W == 8 ||
+    W == 16 ||
+    W == 32 ||
+    W == 64 ||
+    W == 128 ||
+    W == 256;
+}
+
+Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   if (Branch && Budget > 0 && Choose(2)) {
     if (Verbose)
       errs() << "adding a phi, budget = " << Budget << "\n";
@@ -283,13 +296,35 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
-  if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
+  if (UseIntrinsics && Budget > 0 && Width == W && okForBitIntrinsic(Width) && Choose(2)) {
     if (Verbose)
       errs() << "adding unary op with width = " << Width
              << " and budget = " << Budget << "\n";
     --Budget;
     Value *A = genVal(Budget, Width, true);
-    Value *V = Builder->CreateUnaryIntrinsic(Intrinsic::ctpop, A);
+    Intrinsic::ID ID;
+    switch (Choose(5)) {
+    case 0:
+      ID = Intrinsic::ctpop;
+      break;
+    case 1:
+      if (Width != 16 && Width != 32 && Width != 64)
+        exit(0);
+      ID = Intrinsic::bitreverse;
+      break;
+    case 2:
+      if (Width != 16 && Width != 32 && Width != 64)
+        exit(0);
+      ID = Intrinsic::bswap;
+      break;
+    case 3:
+      ID = Intrinsic::ctlz;
+      break;
+    case 4:
+      ID = Intrinsic::cttz;
+      break;
+    }
+    Value *V = Builder->CreateUnaryIntrinsic(ID, A);
     Vals.push_back(V);
     assert(V);
     return V;
@@ -567,7 +602,7 @@ static Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   return Vs.at(Choose(Vs.size()));
 }
 
-static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
+BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   std::vector<inst_iterator> targets;
   auto i = inst_begin(F), ie = inst_end(F);
   ++i;
@@ -587,7 +622,7 @@ static BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   return BB;
 }
 
-static void generate(Module *&M) {
+void generate(Module *&M) {
   M = new Module("", C);
   std::vector<Type *> ArgsTy;
   for (int i = 0; i < N + 2; ++i) {
@@ -697,6 +732,8 @@ void output(Module *M) {
   assert(res == 0);
 }
 
+} // namespace
+  
 int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");

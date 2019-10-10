@@ -528,21 +528,27 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       case 0:
         return UndefValue::get(Type::getIntNTy(C, Width));
       case 1:
-        return ConstantInt::get(C, APInt(Width, 0));
-      case 2:
-        return ConstantInt::get(C, APInt(Width, 1));
-      case 3:
         return ConstantInt::get(C, APInt(Width, -1));
+      case 2:
+        return ConstantInt::get(C, APInt(Width, 0));
+      case 3:
+        return ConstantInt::get(C, APInt(Width, 1));
       case 4:
-        return ConstantInt::get(C, randAPInt(Width));
+        return ConstantInt::get(C, APInt(Width, 2));
       case 5:
         return ConstantInt::get(C, APInt::getSignedMaxValue(Width));
       case 6:
         return ConstantInt::get(C, APInt::getSignedMinValue(Width));
       case 7:
-        return ConstantInt::get(C, APInt(Width, 2));
+      again:
+        {
+          auto i = APInt(Width, (rand()%(10 + (2 * Width)))-(5 + Width));
+          if (i == -1 || i == 0 || i == 1 || i == 2)
+            goto again;
+          return ConstantInt::get(C, i);
+        }
       case 8:
-        return ConstantInt::get(C, APInt(Width, (rand()%(2*Width))-Width));
+        return ConstantInt::get(C, randAPInt(W));
       default:
         assert(false);
       }

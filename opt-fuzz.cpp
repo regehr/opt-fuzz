@@ -61,6 +61,11 @@ cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
 cl::opt<int>
     N("num-insns", cl::desc("Number of instructions (default=2)"), cl::init(2));
 
+cl::opt<int>
+    Promote("promote",
+            cl::desc("Promote narrower arguments and return values to this width (default=no promotion)"),
+            cl::init(-1));
+
 cl::opt<bool>
     Branch("branches",
            cl::desc("Generate branches (default=false) (broken don't use)"),
@@ -296,7 +301,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
 
   if (UseIntrinsics && Budget > 0 && Width == W && okForBitIntrinsic(Width) && Choose(2)) {
     if (Verbose)
-      errs() << "adding unary op with width = " << Width
+      errs() << "adding unary intrinsic with width = " << Width
              << " and budget = " << Budget << "\n";
     --Budget;
     std::vector<Value *> A;
@@ -508,6 +513,36 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
         B->setIsExact(true);
       }
     }
+    Vals.push_back(V);
+    assert(V);
+    return V;
+  }
+
+  if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
+    if (Verbose)
+      errs() << "adding a saturating intrinsic binop with width = " << Width
+             << " and budget = " << Budget << "\n";
+    --Budget;
+    Intrinsic::ID ID;
+    switch (Choose(4)) {
+    case 0:
+      ID = Intrinsic::uadd_sat;
+      break;
+    case 1:
+      ID = Intrinsic::usub_sat;
+      break;
+    case 2:
+      ID = Intrinsic::sadd_sat;
+      break;
+    case 3:
+      ID = Intrinsic::ssub_sat;
+      break;
+    default:
+      llvm::report_fatal_error("oops");
+    }
+    Value *L, *R;
+    genLR(L, R, Budget, Width);
+    Value *V = Builder->CreateBinaryIntrinsic(ID, L, R);
     Vals.push_back(V);
     assert(V);
     return V;

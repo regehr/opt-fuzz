@@ -34,6 +34,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Scalar.h"
 #include <algorithm>
 #include <fcntl.h>
 #include <pthread.h>
@@ -230,7 +231,8 @@ IRBuilder<NoFolder> *Builder;
 LLVMContext C;
 std::vector<Value *> Vals;
 Function *F;
-std::set<Argument *> UsedArgs;
+std::vector<Value *> Args;
+std::set<Value *> UsedArgs;
 std::vector<BasicBlock *> BBs;
 std::vector<BranchInst *> Branches;
 
@@ -613,8 +615,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       errs() << "using function argument with width = " << Width << "\n";
     std::vector<Value *> Vs;
     bool found = false;
-    for (auto &it : F->args()) {
-      Argument *a = &it;
+    for (auto a : Args) {
       if (a->getType()->getPrimitiveSizeInBits() != Width)
         continue;
       Vs.push_back(a);
@@ -666,21 +667,45 @@ BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   return BB;
 }
 
+void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy) {
+  ArgsTy.push_back(IntegerType::getIntNTy(C, W));
+  int RealW = W;
+  if (Promote != -1 && Promote > W)
+    RealW = Promote;
+  RealArgsTy.push_back(IntegerType::getIntNTy(C, RealW));
+}
+
 void generate(Module *&M) {
   M = new Module("", C);
-  std::vector<Type *> ArgsTy;
+  std::vector<Type *> ArgsTy, RealArgsTy;
   for (int i = 0; i < N + 2; ++i) {
-    ArgsTy.push_back(IntegerType::getIntNTy(C, W));
-    ArgsTy.push_back(IntegerType::getIntNTy(C, 1));
-    ArgsTy.push_back(IntegerType::getIntNTy(C, W / 2));
-    ArgsTy.push_back(IntegerType::getIntNTy(C, W * 2));
+    makeArg(W, ArgsTy, RealArgsTy);
+    makeArg(1, ArgsTy, RealArgsTy);
+    makeArg(W / 2, ArgsTy, RealArgsTy);
+    makeArg(W * 2, ArgsTy, RealArgsTy);
   }
-  auto FuncTy = FunctionType::get(Type::getIntNTy(C, Geni1 ? 1 : W), ArgsTy, 0);
+  int RetWidth = Geni1 ? 1 : W;
+  if (Promote != -1 && Promote > RetWidth)
+    RetWidth = Promote;
+  auto FuncTy = FunctionType::get(Type::getIntNTy(C, RetWidth), RealArgsTy, 0);
   F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "func", M);
   BBs.push_back(BasicBlock::Create(C, "", F));
   Builder = new IRBuilder<NoFolder>(BBs[0]);
   int Budget = N;
   Builder->SetInsertPoint(BBs[0]);
+
+  {
+    int i = 0;
+    for (auto &it : F->args()) {
+      Argument *a = &it;
+      int W = ArgsTy[i]->getPrimitiveSizeInBits();
+      if (Promote != -1 && Promote > W)
+        Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));
+      else
+        Args.push_back(a);
+      i++;
+    }
+  }
 
   // the magic happens in genVal()
   Value *V;
@@ -688,6 +713,9 @@ void generate(Module *&M) {
     V = genVal(Budget, 1, false, false);
   else
     V = genVal(Budget, W, false, false);
+
+  if (RetWidth > V->getType()->getPrimitiveSizeInBits())
+    V = Builder->CreateZExt(V, IntegerType::getIntNTy(C, Promote));
   // terminate the only non-terminated BB
   Builder->CreateRet(V);
 
@@ -753,6 +781,7 @@ void output(Module *M) {
   legacy::PassManager Passes;
   if (Verify)
     Passes.add(createVerifierPass());
+  Passes.add(createDeadCodeEliminationPass());
   Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
 

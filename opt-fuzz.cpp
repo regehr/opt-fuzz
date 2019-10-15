@@ -105,9 +105,6 @@ cl::opt<bool>
                        "few selected constants (default=false)"),
               cl::init(false));
 
-cl::opt<bool> Verbose("v", cl::desc("Verbose output (default=false)"),
-                             cl::init(false));
-
 cl::opt<bool> Verify("verify",
                             cl::desc("Run the LLVM verifier (default=true)"),
                             cl::init(true));
@@ -296,8 +293,6 @@ bool okForBitIntrinsic(int W) {
 
 Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   if (Branch && Budget > 0 && Choose(2)) {
-    if (Verbose)
-      errs() << "adding a phi, budget = " << Budget << "\n";
     --Budget;
     Value *V = Builder->CreatePHI(Type::getIntNTy(C, Width), N);
     assert(V);
@@ -306,8 +301,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Branch && Budget > 0 && Budget != N && Choose(2)) {
-    if (Verbose)
-      errs() << "adding a branch, budget = " << Budget << "\n";
     --Budget;
     BranchInst *Br;
     if (0 && Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
@@ -326,9 +319,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
 
   if (UseIntrinsics && Budget > 0 && Width == W && okForBitIntrinsic(Width) && Choose(2)) {
-    if (Verbose)
-      errs() << "adding unary intrinsic with width = " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     std::vector<Value *> A;
     std::vector<Type *> T;
@@ -365,9 +355,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
   
   if (Budget > 0 && Width == W && Choose(2)) {
-    if (Verbose)
-      errs() << "adding a select with width = " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     Value *L, *R;
     gen2(L, R, Budget, Width);
@@ -379,9 +366,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Budget > 0 && Width == 1 && Choose(2)) {
-    if (Verbose)
-      errs() << "adding an icmp with width = " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     Value *L, *R;
     gen2(L, R, Budget, W);
@@ -426,9 +410,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
 
   if (Budget > 0 && Width == W && Choose(2)) {
     int OldW = Width * 2;
-    if (Verbose)
-      errs() << "adding a trunc from " << OldW << " to " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(C, Width));
@@ -439,9 +420,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
 
   if (Budget > 0 && Width == 1 && Choose(2)) {
     int OldW = W;
-    if (Verbose)
-      errs() << "adding a trunc from " << OldW << " to " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(C, 1));
@@ -454,9 +432,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     int OldW = Width / 2;
     if (OldW > 1 && Choose(2))
       OldW = 1;
-    if (Verbose)
-      errs() << "adding a zext from " << OldW << " to " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     Value *V;
     if (Choose(2))
@@ -470,9 +445,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
-    if (Verbose)
-      errs() << "adding a binop with width = " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     Instruction::BinaryOps Op;
     switch (OneBinop ? 0 : Choose(13)) {
@@ -595,9 +567,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
   
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
-    if (Verbose)
-      errs() << "adding a saturating intrinsic binop with width = " << Width
-             << " and budget = " << Budget << "\n";
     --Budget;
     Intrinsic::ID ID;
     switch (Choose(4)) {
@@ -630,9 +599,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
    */
 
   if (ConstOK && Choose(2)) {
-    if (Verbose)
-      errs() << "adding a const with width = " << Width
-             << " and budget = " << Budget << "\n";
     if (FewConsts) {
       int n = Choose(9);
       switch (n) {
@@ -685,8 +651,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
      * been used + the first not-yet-used one (among those with
      * matching widths)
      */
-    if (Verbose)
-      errs() << "using function argument with width = " << Width << "\n";
     std::vector<Value *> Vs;
     bool found = false;
     for (auto a : Args) {
@@ -709,8 +673,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     return Vs.at(Choose(Vs.size()));
   }
 
-  if (Verbose)
-    errs() << "using existing val with width = " << Width << "\n";
   std::vector<Value *> Vs;
   for (auto &it : Vals)
     if (it->getType()->getPrimitiveSizeInBits() == (unsigned)Width)
@@ -734,8 +696,6 @@ BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   if (I == &*I->getParent()->getFirstInsertionPt()) {
     BB = I->getParent();
   } else {
-    if (Verbose)
-      errs() << "splitting a BB\n";
     BB = I->getParent()->splitBasicBlock(I, "spl");
   }
   return BB;

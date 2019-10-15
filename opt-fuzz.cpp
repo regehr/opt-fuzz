@@ -527,6 +527,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
+  // this one is a bit different than other instructions since we'll
+  // synthesize it when either a full-width value or an i1 is required
   if (UseIntrinsics && Budget > 0 && (Width == 1 || Width == W) && Choose(2)) {
     --Budget;
     Value *L, *R;

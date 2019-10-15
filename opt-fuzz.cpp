@@ -118,9 +118,10 @@ cl::opt<bool> Verify("verify",
 #define STRINGIFY(x) #x
 #define assert(expr)                                                           \
   do {                                                                         \
-    if (!(expr))                                                               \
+    if (!(expr)) {                                                             \
       die(#expr " failed at line " STRINGIFY(__LINE__));                       \
       llvm_unreachable("assert");                                              \
+    }                                                                          \
   } while (0)
 
 struct shared {
@@ -250,24 +251,24 @@ void gen2(Value *&L, Value *&R, int &Budget, int Width) {
   }
 }
 
-std::tuple<Value *, Value *, Value *> gen3(int &Budget, int Width) {
+std::vector<Value *> gen3(int &Budget, int Width) {
   auto A = genVal(Budget, Width, true);
   auto B = genVal(Budget, Width, true);
   auto C = genVal(Budget, Width, (!isa<Constant>(A) && !isa<UndefValue>(A)) ||
                                  (!isa<Constant>(B) && !isa<UndefValue>(B)));
   switch (rand() % 5) {
   case 0:
-    return std::make_tuple(A, B, C);
+    return std::vector{ A, B, C };
   case 1:
-    return std::make_tuple(A, C, B);
+    return std::vector{ A, C, B };
   case 2:
-    return std::make_tuple(B, A, C);
+    return std::vector{ B, A, C };
   case 3:
-    return std::make_tuple(B, C, A);
+    return std::vector{ B, C, A };
   case 4:
-    return std::make_tuple(C, A, B);
+    return std::vector{ C, A, B };
   case 5:
-    return std::make_tuple(C, B, A);
+    return std::vector{ C, B, A };
   }
   assert(false);
 }
@@ -299,8 +300,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
       errs() << "adding a phi, budget = " << Budget << "\n";
     --Budget;
     Value *V = Builder->CreatePHI(Type::getIntNTy(C, Width), N);
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
 
@@ -358,8 +359,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
       break;
     }
     Value *V = Builder->CreateIntrinsic(ID, T, A);
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
   
@@ -372,8 +373,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     gen2(L, R, Budget, Width);
     Value *C = genVal(Budget, 1, false);
     Value *V = Builder->CreateSelect(C, L, R);
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
 
@@ -418,8 +419,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
       break;
     }
     Value *V = Builder->CreateICmp(P, L, R);
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
 
@@ -431,8 +432,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     --Budget;
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(C, Width));
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
 
@@ -444,8 +445,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     --Budget;
     Value *V = Builder->CreateTrunc(genVal(Budget, OldW, false),
                                     Type::getIntNTy(C, 1));
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
 
@@ -538,16 +539,20 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
         B->setIsExact(true);
       }
     }
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
 
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
     --Budget;
-    Value *A, *B, *C;
-    std::tie(A, B, C) = gen3(Budget, Width);
-    Intrinsic::ID ID = Choose(2) ? Intrinsic::fshl : Intrinsic::fshr;    
+    std::vector<Value *>Args = gen3(Budget, Width);
+    Intrinsic::ID ID = Choose(2) ? Intrinsic::fshl : Intrinsic::fshr;
+    std::vector<Type *>T { Type::getIntNTy(C, Width) };
+    Value *V = Builder->CreateIntrinsic(ID, T, Args);
+    assert(V);
+    Vals.push_back(V);
+    return V;
   }
   
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
@@ -575,8 +580,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     Value *L, *R;
     gen2(L, R, Budget, Width);
     Value *V = Builder->CreateBinaryIntrinsic(ID, L, R);
-    Vals.push_back(V);
     assert(V);
+    Vals.push_back(V);
     return V;
   }
 

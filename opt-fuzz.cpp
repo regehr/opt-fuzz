@@ -469,12 +469,6 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
-    --Budget;
-    Value *A, *B, *C;
-    std::tie(A, B, C) = gen3(Budget, Width);
-  }
-  
-  if (Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
       errs() << "adding a binop with width = " << Width
              << " and budget = " << Budget << "\n";
@@ -549,6 +543,13 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
+  if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
+    --Budget;
+    Value *A, *B, *C;
+    std::tie(A, B, C) = gen3(Budget, Width);
+    Intrinsic::ID ID = Choose(2) ? Intrinsic::fshl : Intrinsic::fshr;    
+  }
+  
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
       errs() << "adding a saturating intrinsic binop with width = " << Width

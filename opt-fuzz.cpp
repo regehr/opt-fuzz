@@ -554,6 +554,45 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     Vals.push_back(V);
     return V;
   }
+
+  if (UseIntrinsics && Budget > 0 && (Width == 1 || Width == W) && Choose(2)) {
+    --Budget;
+    Value *L, *R;
+    gen2(L, R, Budget, W);
+    Intrinsic::ID ID;
+    switch (Choose(6)) {
+    case 0:
+      ID = Intrinsic::uadd_with_overflow;
+      break;
+    case 1:
+      ID = Intrinsic::sadd_with_overflow;
+      break;
+    case 2:
+      ID = Intrinsic::usub_with_overflow;
+      break;
+    case 3:
+      ID = Intrinsic::ssub_with_overflow;
+      break;
+    case 4:
+      ID = Intrinsic::umul_with_overflow;
+      break;
+    case 5:
+      ID = Intrinsic::smul_with_overflow;
+      break;
+    }
+    Value *V = Builder->CreateBinaryIntrinsic(ID, L, R);
+    assert(V);
+    Value *V1 = Builder->CreateExtractValue(V, 0);
+    Value *V2 = Builder->CreateExtractValue(V, 1);
+    assert(V1);
+    assert(V2);
+    Vals.push_back(V1);
+    Vals.push_back(V2);
+    if (Width == 1)
+      return V2;
+    else
+      return V1;
+  }
   
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
@@ -714,6 +753,7 @@ void generate(Module *&M) {
   M = new Module("", C);
   std::vector<Type *> ArgsTy, RealArgsTy;
   for (int i = 0; i < N + 2; ++i) {
+    makeArg(W, ArgsTy, RealArgsTy);
     makeArg(W, ArgsTy, RealArgsTy);
     makeArg(1, ArgsTy, RealArgsTy);
     makeArg(W / 2, ArgsTy, RealArgsTy);

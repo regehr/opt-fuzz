@@ -741,17 +741,17 @@ void generate(Module *&M) {
   int Budget = N;
   Builder->SetInsertPoint(BBs[0]);
 
-  {
-    int i = 0;
-    for (auto &it : F->args()) {
-      Argument *a = &it;
-      int W = ArgsTy[i]->getPrimitiveSizeInBits();
-      if (Promote != -1 && Promote > W)
-        Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));
-      else
-        Args.push_back(a);
-      i++;
+  for (int i = 0; i < ArgsTy.size(); ++i) {
+    Argument *a;
+    if (ArgsFromMem) {
+    } else {
+      a = F->getArg(i);
     }
+    int W = ArgsTy[i]->getPrimitiveSizeInBits();
+    if (Promote != -1 && Promote > W)
+      Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));
+    else
+      Args.push_back(a);
   }
 
   // the magic happens in genVal()

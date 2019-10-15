@@ -120,6 +120,7 @@ cl::opt<bool> Verify("verify",
   do {                                                                         \
     if (!(expr))                                                               \
       die(#expr " failed at line " STRINGIFY(__LINE__));                       \
+      llvm_unreachable("assert");                                              \
   } while (0)
 
 struct shared {
@@ -201,9 +202,9 @@ void increase_runners(int Depth) {
     die("unlock failed");
 }
 
-unsigned Choose(unsigned n) {
+int Choose(int n) {
   assert(n > 0);
-  for (unsigned i = 0; i < (n - 1); ++i) {
+  for (int i = 0; i < (n - 1); ++i) {
     if (Shmem->Stop) {
       pthread_mutex_unlock(&Shmem->Lock);
       exit(-1);
@@ -236,17 +237,39 @@ std::set<Value *> UsedArgs;
 std::vector<BasicBlock *> BBs;
 std::vector<BranchInst *> Branches;
 
-Value *genVal(int &Budget, unsigned Width, bool ConstOK,
+Value *genVal(int &Budget, int Width, bool ConstOK,
                      bool ArgOK = true);
 
-void genLR(Value *&L, Value *&R, int &Budget, unsigned Width) {
+void gen2(Value *&L, Value *&R, int &Budget, int Width) {
   L = genVal(Budget, Width, true);
   R = genVal(Budget, Width, !isa<Constant>(L) && !isa<UndefValue>(L));
-  if ((::getpid() & 1) == 0) {
+  if ((rand() & 1) == 0) {
     Value *T = L;
     L = R;
     R = T;
   }
+}
+
+std::tuple<Value *, Value *, Value *> gen3(int &Budget, int Width) {
+  auto A = genVal(Budget, Width, true);
+  auto B = genVal(Budget, Width, true);
+  auto C = genVal(Budget, Width, (!isa<Constant>(A) && !isa<UndefValue>(A)) ||
+                                 (!isa<Constant>(B) && !isa<UndefValue>(B)));
+  switch (rand() % 5) {
+  case 0:
+    return std::make_tuple(A, B, C);
+  case 1:
+    return std::make_tuple(A, C, B);
+  case 2:
+    return std::make_tuple(B, A, C);
+  case 3:
+    return std::make_tuple(B, C, A);
+  case 4:
+    return std::make_tuple(C, A, B);
+  case 5:
+    return std::make_tuple(C, B, A);
+  }
+  assert(false);
 }
 
 // true pseudorandom, not BET
@@ -260,7 +283,7 @@ APInt randAPInt(int Width) {
   return Val;
 }
 
-bool okForBitIntrinsic(unsigned W) {
+bool okForBitIntrinsic(int W) {
   return
     W == 8 ||
     W == 16 ||
@@ -270,7 +293,7 @@ bool okForBitIntrinsic(unsigned W) {
     W == 256;
 }
 
-Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
+Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   if (Branch && Budget > 0 && Choose(2)) {
     if (Verbose)
       errs() << "adding a phi, budget = " << Budget << "\n";
@@ -346,7 +369,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
              << " and budget = " << Budget << "\n";
     --Budget;
     Value *L, *R;
-    genLR(L, R, Budget, Width);
+    gen2(L, R, Budget, Width);
     Value *C = genVal(Budget, 1, false);
     Value *V = Builder->CreateSelect(C, L, R);
     Vals.push_back(V);
@@ -360,7 +383,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
              << " and budget = " << Budget << "\n";
     --Budget;
     Value *L, *R;
-    genLR(L, R, Budget, W);
+    gen2(L, R, Budget, W);
     CmpInst::Predicate P;
     switch (OneICmp ? 0 : Choose(10)) {
     case 0:
@@ -401,7 +424,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
-    unsigned OldW = Width * 2;
+    int OldW = Width * 2;
     if (Verbose)
       errs() << "adding a trunc from " << OldW << " to " << Width
              << " and budget = " << Budget << "\n";
@@ -414,7 +437,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Budget > 0 && Width == 1 && Choose(2)) {
-    unsigned OldW = W;
+    int OldW = W;
     if (Verbose)
       errs() << "adding a trunc from " << OldW << " to " << Width
              << " and budget = " << Budget << "\n";
@@ -427,7 +450,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
   }
 
   if (Budget > 0 && Width == W && Choose(2)) {
-    unsigned OldW = Width / 2;
+    int OldW = Width / 2;
     if (OldW > 1 && Choose(2))
       OldW = 1;
     if (Verbose)
@@ -445,6 +468,12 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
+  if (Budget > 0 && Width == W && Choose(2)) {
+    --Budget;
+    Value *A, *B, *C;
+    std::tie(A, B, C) = gen3(Budget, Width);
+  }
+  
   if (Budget > 0 && Width == W && Choose(2)) {
     if (Verbose)
       errs() << "adding a binop with width = " << Width
@@ -493,7 +522,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       break;
     }
     Value *L, *R;
-    genLR(L, R, Budget, Width);
+    gen2(L, R, Budget, Width);
     Value *V = Builder->CreateBinOp(Op, L, R);
     if (!NoUB) {
       if ((Op == Instruction::Add || Op == Instruction::Sub ||
@@ -543,7 +572,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
       llvm::report_fatal_error("oops");
     }
     Value *L, *R;
-    genLR(L, R, Budget, Width);
+    gen2(L, R, Budget, Width);
     Value *V = Builder->CreateBinaryIntrinsic(ID, L, R);
     Vals.push_back(V);
     assert(V);
@@ -616,7 +645,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     std::vector<Value *> Vs;
     bool found = false;
     for (auto a : Args) {
-      if (a->getType()->getPrimitiveSizeInBits() != Width)
+      if (a->getType()->getPrimitiveSizeInBits() != (unsigned)Width)
         continue;
       Vs.push_back(a);
       if (UsedArgs.find(a) == UsedArgs.end()) {
@@ -639,7 +668,7 @@ Value *genVal(int &Budget, unsigned Width, bool ConstOK, bool ArgOK) {
     errs() << "using existing val with width = " << Width << "\n";
   std::vector<Value *> Vs;
   for (auto &it : Vals)
-    if (it->getType()->getPrimitiveSizeInBits() == Width)
+    if (it->getType()->getPrimitiveSizeInBits() == (unsigned)Width)
       Vs.push_back(it);
   // this can happen when no values have been created yet, no big deal
   if (Vs.size() == 0)
@@ -714,7 +743,7 @@ void generate(Module *&M) {
   else
     V = genVal(Budget, W, false, false);
 
-  if (RetWidth > V->getType()->getPrimitiveSizeInBits())
+  if ((unsigned)RetWidth > V->getType()->getPrimitiveSizeInBits())
     V = Builder->CreateZExt(V, IntegerType::getIntNTy(C, Promote));
   // terminate the only non-terminated BB
   Builder->CreateRet(V);

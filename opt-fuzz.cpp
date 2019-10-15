@@ -68,6 +68,16 @@ cl::opt<int>
             cl::init(-1));
 
 cl::opt<bool>
+    ArgsFromMem("args-from-memory",
+		cl::desc("Function arguments come from memory instead of calling convention (default=false)"),
+		cl::init(false));
+  
+cl::opt<bool>
+    RetToMem("return-to-memory",
+	       cl::desc("Function return values go to memory instead of calling convention (default=false)"),
+	       cl::init(false));
+  
+cl::opt<bool>
     Branch("branches",
            cl::desc("Generate branches (default=false) (broken don't use)"),
            cl::init(false));

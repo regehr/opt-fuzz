@@ -715,7 +715,6 @@ BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
 }
 
 std::vector<Value *> globs;
-std::vector<Value *> memArgs;
   
 void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy) {
   ArgsTy.push_back(IntegerType::getIntNTy(C, W));
@@ -756,10 +755,11 @@ void generate() {
   for (unsigned i = 0; i < ArgsTy.size(); ++i) {
     Value *a;
     if (ArgsFromMem) {
-      a = Builder->CreateLoad(ArgsTy[i], globs[i]);
+      a = Builder->CreateLoad(globs[i], "");
     } else {
       a = F->getArg(i);
     }
+    assert(a);
     int W = ArgsTy[i]->getPrimitiveSizeInBits();
     if (Promote != -1 && Promote > W)
       Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));

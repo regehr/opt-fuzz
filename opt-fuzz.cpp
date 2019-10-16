@@ -720,20 +720,19 @@ void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy
   int RealW = W;
   if (Promote != -1 && Promote > W)
     RealW = Promote;
+  ArgsTy.push_back(IntegerType::getIntNTy(C, W));
+  auto T = IntegerType::getIntNTy(C, RealW);
+  RealArgsTy.push_back(T);
   if (ArgsFromMem) {
-    auto T = PointerType::getIntNPtrTy(C, RealW);
     GlobalVariable *g = new GlobalVariable(*M, T, /*isConstant=*/false,
                                            /*Linkage=*/GlobalValue::ExternalLinkage,
                                            /*Initializer=*/0);
     globs.push_back(g);
   }
-  ArgsTy.push_back(IntegerType::getIntNTy(C, W));
-  RealArgsTy.push_back(IntegerType::getIntNTy(C, RealW));
 }
 
 void generate() {
   M = new Module("", C);
-      exit(0);
   std::vector<Type *> ArgsTy, RealArgsTy, MT;
   for (int i = 0; i < N + 2; ++i) {
     makeArg(W, ArgsTy, RealArgsTy);
@@ -755,13 +754,10 @@ void generate() {
 
   for (unsigned i = 0; i < ArgsTy.size(); ++i) {
     Value *a;
-    if (ArgsFromMem) {
-      cerr << RealArgsTy.at(i) << "\n";
-      cerr << globs.at(i)->getType() << "\n";
+    if (ArgsFromMem)
       a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
-    } else {
+    else
       a = F->getArg(i);
-    }
     assert(a);
     int W = ArgsTy.at(i)->getPrimitiveSizeInBits();
     if (Promote != -1 && Promote > W)

@@ -240,6 +240,7 @@ IRBuilder<NoFolder> *Builder;
 LLVMContext C;
 std::vector<Value *> Vals;
 Function *F;
+Module *M;
 std::vector<Value *> Args;
 std::set<Value *> UsedArgs;
 std::vector<BasicBlock *> BBs;
@@ -713,15 +714,26 @@ BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
   return BB;
 }
 
+std::vector<Value *> globs;
+std::vector<Value *> memArgs;
+  
 void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy) {
   ArgsTy.push_back(IntegerType::getIntNTy(C, W));
   int RealW = W;
   if (Promote != -1 && Promote > W)
     RealW = Promote;
-  RealArgsTy.push_back(IntegerType::getIntNTy(C, RealW));
+  if (ArgsFromMem) {
+    auto T = PointerType::getIntNPtrTy(C, RealW);
+    GlobalVariable *g = new GlobalVariable(*M, T, /*isConstant=*/false,
+                                           /*Linkage=*/GlobalValue::ExternalLinkage,
+                                           /*Initializer=*/0);
+    globs.push_back(g);
+  } else {
+    RealArgsTy.push_back(IntegerType::getIntNTy(C, RealW));
+  }
 }
 
-void generate(Module *&M) {
+void generate() {
   M = new Module("", C);
   std::vector<Type *> ArgsTy, RealArgsTy;
   for (int i = 0; i < N + 2; ++i) {
@@ -741,9 +753,10 @@ void generate(Module *&M) {
   int Budget = N;
   Builder->SetInsertPoint(BBs[0]);
 
-  for (int i = 0; i < ArgsTy.size(); ++i) {
-    Argument *a;
+  for (unsigned i = 0; i < ArgsTy.size(); ++i) {
+    Value *a;
     if (ArgsFromMem) {
+      a = Builder->CreateLoad(ArgsTy[i], globs[i]);
     } else {
       a = F->getArg(i);
     }
@@ -822,7 +835,7 @@ redo:
   }
 }
 
-void output(Module *M) {
+void output() {
   std::string SStr;
   raw_string_ostream SS(SStr);
   legacy::PassManager Passes;
@@ -900,9 +913,8 @@ int main(int argc, char **argv) {
   if (::pipe(p) != 0)
     die("pipe failed??");
 
-  Module *M;
-  generate(M);
-  output(M);
+  generate();
+  output();
 
   if (::getpid() == original_pid) {
     char buf[1];

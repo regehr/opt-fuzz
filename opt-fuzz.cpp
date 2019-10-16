@@ -757,6 +757,7 @@ void generate() {
     if (ArgsFromMem) {
       cerr << RealArgsTy.at(i) << "\n";
       cerr << globs.at(i)->getType() << "\n";
+      exit(0);
       a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
     } else {
       a = F->getArg(i);

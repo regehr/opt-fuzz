@@ -315,7 +315,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     --Budget;
     BranchInst *Br;
     if (0 && Builder->GetInsertBlock()->size() > 0 && Choose(2)) {
-      Br = Builder->CreateBr(BBs[0]);
+      Br = Builder->CreateBr(BBs.at(0));
     } else {
       Value *C = genVal(Budget, 1, false, ArgOK);
       Br = Builder->CreateCondBr(C, BBs[0], BBs[0]);
@@ -334,7 +334,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     std::vector<Value *> A;
     std::vector<Type *> T;
     A.push_back(genVal(Budget, Width, false));
-    T.push_back(A[0]->getType());
+    T.push_back(A.at(0)->getType());
     Intrinsic::ID ID;
     switch (Choose(5)) {
     case 0:
@@ -717,7 +717,6 @@ BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
 std::vector<Value *> globs;
   
 void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy) {
-  ArgsTy.push_back(IntegerType::getIntNTy(C, W));
   int RealW = W;
   if (Promote != -1 && Promote > W)
     RealW = Promote;
@@ -727,14 +726,14 @@ void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy
                                            /*Linkage=*/GlobalValue::ExternalLinkage,
                                            /*Initializer=*/0);
     globs.push_back(g);
-  } else {
-    RealArgsTy.push_back(IntegerType::getIntNTy(C, RealW));
   }
+  ArgsTy.push_back(IntegerType::getIntNTy(C, W));
+  RealArgsTy.push_back(IntegerType::getIntNTy(C, RealW));
 }
 
 void generate() {
   M = new Module("", C);
-  std::vector<Type *> ArgsTy, RealArgsTy;
+  std::vector<Type *> ArgsTy, RealArgsTy, MT;
   for (int i = 0; i < N + 2; ++i) {
     makeArg(W, ArgsTy, RealArgsTy);
     makeArg(W, ArgsTy, RealArgsTy);
@@ -745,7 +744,8 @@ void generate() {
   int RetWidth = Geni1 ? 1 : W;
   if (Promote != -1 && Promote > RetWidth)
     RetWidth = Promote;
-  auto FuncTy = FunctionType::get(Type::getIntNTy(C, RetWidth), RealArgsTy, 0);
+  auto FuncTy = FunctionType::get(Type::getIntNTy(C, RetWidth),
+                                  ArgsFromMem ? MT : RealArgsTy, 0);
   F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "func", M);
   BBs.push_back(BasicBlock::Create(C, "", F));
   Builder = new IRBuilder<NoFolder>(BBs[0]);
@@ -755,12 +755,12 @@ void generate() {
   for (unsigned i = 0; i < ArgsTy.size(); ++i) {
     Value *a;
     if (ArgsFromMem) {
-      a = Builder->CreateLoad(globs[i], "");
+      a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
     } else {
       a = F->getArg(i);
     }
     assert(a);
-    int W = ArgsTy[i]->getPrimitiveSizeInBits();
+    int W = ArgsTy.at(i)->getPrimitiveSizeInBits();
     if (Promote != -1 && Promote > W)
       Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));
     else

@@ -755,7 +755,8 @@ void generate() {
   for (unsigned i = 0; i < ArgsTy.size(); ++i) {
     Value *a;
     if (ArgsFromMem) {
-      cerr << RealArgsTy.at(i);
+      cerr << RealArgsTy.at(i) << "\n";
+      cerr << globs.at(i)->getType() << "\n";
       a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
     } else {
       a = F->getArg(i);

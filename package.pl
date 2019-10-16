@@ -14,6 +14,7 @@ my @files = glob "$IND/*.ll";
 print "processing ".scalar(@files)." files\n";
 
 foreach my $inf (@files) {
+    print "about to process $inf\n";
     my $outf = File::Basename::basename($inf, ".ll");
     open my $INF, "<$inf" or die;
     open my $OUTF, "| llvm-as -o $OUTD/${outf}.bc" or die;
@@ -29,5 +30,4 @@ foreach my $inf (@files) {
     }
     close $INF;
     close $OUTF;
-    print "done with $inf\n";
 }

@@ -733,6 +733,7 @@ void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy
 
 void generate() {
   M = new Module("", C);
+      exit(0);
   std::vector<Type *> ArgsTy, RealArgsTy, MT;
   for (int i = 0; i < N + 2; ++i) {
     makeArg(W, ArgsTy, RealArgsTy);
@@ -757,7 +758,6 @@ void generate() {
     if (ArgsFromMem) {
       cerr << RealArgsTy.at(i) << "\n";
       cerr << globs.at(i)->getType() << "\n";
-      exit(0);
       a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
     } else {
       a = F->getArg(i);

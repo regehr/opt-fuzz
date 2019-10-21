@@ -67,6 +67,11 @@ cl::opt<int>
             cl::desc("Promote narrower arguments and return values to this width (default=no promotion)"),
             cl::init(-1));
 
+cl::opt<std::string>
+    BaseName("base",
+             cl::desc("Base name for emitted functions (default=\"func\")"),
+             cl::init("func"));
+
 cl::opt<bool>
     ArgsFromMem("args-from-memory",
 		cl::desc("Function arguments come from memory instead of calling convention (default=false)"),
@@ -746,7 +751,7 @@ void generate() {
     RetWidth = Promote;
   auto FuncTy = FunctionType::get(Type::getIntNTy(C, RetWidth),
                                   ArgsFromMem ? MT : RealArgsTy, 0);
-  F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, "func", M);
+  F = Function::Create(FuncTy, GlobalValue::ExternalLinkage, BaseName, M);
   BBs.push_back(BasicBlock::Create(C, "", F));
   Builder = new IRBuilder<NoFolder>(BBs[0]);
   int Budget = N;
@@ -845,10 +850,10 @@ void output() {
   Passes.run(*M);
 
   std::stringstream ss;
-  ss << "func" << std::to_string(Id);
+  ss << BaseName << std::to_string(Id);
   std::string FN = std::to_string(rand() % NumFiles) + ".ll";
   std::string func = SS.str();
-  func.replace(func.find("func"), 4, ss.str());
+  func.replace(func.find(BaseName), BaseName.length(), ss.str());
   int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
   if (fd < 2)
     die("open failed");

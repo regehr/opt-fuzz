@@ -14,12 +14,13 @@ Any verification failure represents a bug in LLVM or Alive.
 
 # Building
 
-Prereq: Clang/LLVM 10 is installed and in the PATH.
+Prereq: Clang/LLVM 10 is installed and in the PATH. If it is not, you
+can tell CMake where it is using the LLVM_DIR argument.
 
 ```
 mkdir build
 cd build
-cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release
 ```
 
 # TODO opt-fuzz improvements

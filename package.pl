@@ -22,7 +22,8 @@ foreach my $inf (@files) {
     while (my $line = <$INF>) {
         next if $line =~ /^; /;
         next if $line =~ /^attributes /;
-        if ($line =~ /^declare /) {
+        if ($line =~ /^declare / ||
+	    $line =~ /external global/) {
             next if (exists $decs{$line});
             $decs{$line} = 1;
         }

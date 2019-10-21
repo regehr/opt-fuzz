@@ -23,25 +23,28 @@ cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 ```
 
-# TODO opt-fuzz improvements
+# TODO opt-fuzz short-term improvements
 
 - write code for return values in memory
-- add another in-memory mode where args/results are in a struct
+- add a separate in-memory mode where args/results are in a struct, pointer as argument
 - generate vectors
   - width becomes element width
   - additional argument for vector size
+- optionally print to pipes running compressors
+- figure out optimal number of cores for max speedup
+
+# TODO opt-fuzz longer term / less important improvements
+
 - generate FP types
 - generate pointers/GEPs/allocas/memcpys/etc.
-- print functions to named pipes running a compressor?
 - leave wide-bitwidth constants as symbolic, use Klee to cover
   interesting cases in the optimizer; or try AFL, but again only
   changing values of constants
-- make branches work
+- make forward branches work
 - phi shouldn't use any budget?
 - implement Nuno's ideas about synthesizing good constants from Alive preconditions,
   see his mail from May 20, 2017
 - factor out budget > 0 checks
-- optionally generate only forward branches
 
 # TODO using opt-fuzz
 

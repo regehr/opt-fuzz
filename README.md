@@ -24,7 +24,11 @@ cmake .. -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYP
 
 # TODO opt-fuzz improvements
 
+- write code for return values in memory
+- add another in-memory mode where args/results are in a struct
 - generate vectors
+  - width becomes element width
+  - additional argument for vector size
 - generate FP types
 - generate pointers/GEPs/allocas/memcpys/etc.
 - print functions to named pipes running a compressor?

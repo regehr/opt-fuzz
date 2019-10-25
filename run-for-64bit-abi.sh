@@ -1,6 +1,6 @@
 N=2
 OPTFUZZ=/home/regehr/opt-fuzz/build/opt-fuzz
-ARGS='--cores=32 --fewconsts --promote=64'
+ARGS='--cores=10 --fewconsts --promote=64'
 
 $OPTFUZZ $ARGS --width=8 --num-insns=$N --base="w8_"
 $OPTFUZZ $ARGS --width=16 --num-insns=$N --base="w16_"

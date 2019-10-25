@@ -67,6 +67,11 @@ cl::opt<int>
             cl::desc("Promote narrower arguments and return values to this width (default=no promotion)"),
             cl::init(-1));
 
+cl::opt<bool>
+    GenerateUndef("generate-undef",
+                  cl::desc("Generate explicit undef inputs (default=false)"),
+                  cl::init(false));
+  
 cl::opt<std::string>
     BaseName("base",
              cl::desc("Base name for emitted functions (default=\"func\")"),
@@ -618,10 +623,10 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
 
   if (ConstOK && Choose(2)) {
     if (FewConsts) {
-      int n = Choose(9);
+      int n = Choose(GenerateUndef ? 9 : 8);
       switch (n) {
       case 0:
-        return UndefValue::get(Type::getIntNTy(C, Width));
+        return ConstantInt::get(C, randAPInt(W));
       case 1:
         return ConstantInt::get(C, APInt(Width, -1));
       case 2:
@@ -643,13 +648,13 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
           return ConstantInt::get(C, i);
         }
       case 8:
-        return ConstantInt::get(C, randAPInt(W));
+        return UndefValue::get(Type::getIntNTy(C, Width));
       default:
         assert(false);
       }
       return ConstantInt::get(C, APInt(Width, 1));
     } else {
-      int n = Choose((1 << Width) + 1);
+      int n = Choose((1 << Width) + GenerateUndef ? 1 : 0);
       if (n == (1 << Width))
         return UndefValue::get(Type::getIntNTy(C, Width));
       else

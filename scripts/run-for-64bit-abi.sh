@@ -1,4 +1,4 @@
-N=2
+N=1
 OPTFUZZ=/home/regehr/opt-fuzz/build/opt-fuzz
 ARGS='--cores=10 --fewconsts --promote=64'
 

@@ -75,12 +75,15 @@ if (1) {
     open $INF, "llvm-dis ${base}-decomp.bc -o - |" or die;
     open $OUTF, "| opt -O2 -S -o - >${base}-decomp.ll" or die;
     while (my $line = <$INF>) {
-        if (($line =~ /tail call/ &&
-             $line =~ /remill_function_return/) ||
-            $line =~ /target triple/) {
-        } else {
-            print $OUTF $line;
+        next if ($line =~ /target triple/);
+        if ($line =~ /(\%[0-9]+) = tail call/) {
+            my $var = $1;
+            if ($line =~ /remill_function_return/) {
+                print $OUTF "${var} = add i32 0, 0\n";
+                next;
+            }
         }
+        print $OUTF $line;
     }
     close $INF;
     close $OUTF;

@@ -7,6 +7,8 @@ use File::Basename;
 my $OPTFUZZ=$ENV{"HOME"}."/opt-fuzz";
 my $WIDTH = 32;
 
+my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
+
 my $inf = $ARGV[0];
 die unless -f $inf;
 
@@ -17,7 +19,7 @@ die "expected LLVM IR" unless exists $suffixes{$suffix};
 $base = $dirs . $base;
 
 # opt-fuzz emits too many arguments, get rid of unneeded ones
-system "opt -strip $inf -S -o - | ${OPTFUZZ}/scripts/test-llvm-backends/unused-arg-elimination.pl | opt -strip -S -o ${base}-stripped.ll";
+system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${base}-stripped.ll";
 
 # IR -> object code
 system "clang -c -O ${base}-stripped.ll -o ${base}.o";
@@ -37,7 +39,15 @@ if (1) {
         }
     }
     close $INF;
-    print "$bytes\n";
+    print "object code: $bytes\n";
+    open $INF, "<${SCRIPTS}/slice.json" or die;
+    open my $OUTF, ">slice2.json" or die;
+    while (my $line = <$INF>) {
+        $line =~ s/CODEGOESHERE/$bytes/;
+        print $OUTF $line;
+    }    
+    close $INF;
+    close $OUTF;
 }
 
 # MCTOLL

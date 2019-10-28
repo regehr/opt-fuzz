@@ -38,7 +38,7 @@
   "memory": [
     {
       "address": 0,
-      "data": "66c1c70889f8250f0f0000c1e00481e7f0f00000c1ef0409c789f8253333000081e7cccc0000c1ef028d048789c181e15555000025aaaa0000d1e88d0448c3",
+      "data": "CODEGOESHERE",
       "is_readable": true,
       "is_executable": true
     }

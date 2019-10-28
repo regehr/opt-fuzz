@@ -56,15 +56,16 @@ if (1) {
         }
     }
     close $INF;
+    print "detected $nargs function arguments\n";
     open $INF, "<${SCRIPTS}/slice-${nargs}arg.json" or die;
-    open my $OUTF, ">slice2.json" or die;
+    open my $OUTF, ">${base}.json" or die;
     while (my $line = <$INF>) {
         $line =~ s/CODEGOESHERE/$bytes/;
         print $OUTF $line;
     }    
     close $INF;
     close $OUTF;
-    system "${ANVILL} --spec slice2.json  --bc_out ${base}-decomp.bc >/dev/null 2>&1";
+    system "${ANVILL} --spec ${base}.json  --bc_out ${base}-decomp.bc >/dev/null 2>&1";
     open $INF, "llvm-dis ${base}-decomp.bc -o - |" or die;
     open $OUTF, "| opt -O2 -S -o - >${base}-decomp.ll" or die;
     while (my $line = <$INF>) {

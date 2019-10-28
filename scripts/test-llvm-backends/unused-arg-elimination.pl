@@ -28,7 +28,7 @@ print PROTOS "typedef long uint64_t;\n";
 
 while (my $line = <STDIN>) {
     # assuming no bad line breaks!
-    if ($line =~ /define (i[0-9]+) @(func[0-9]+)\((.*)\).*\{/) {
+    if ($line =~ /define (i[0-9]+) @([a-zA-Z0-9]+)\((.*)\).*\{/) {
         $rettype = $1;
         $fname = $2;
         my $argstr = $3;

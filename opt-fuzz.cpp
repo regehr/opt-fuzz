@@ -855,17 +855,29 @@ void output() {
   Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
 
-  std::stringstream ss;
-  ss << BaseName << std::to_string(Id);
-  std::string FN = std::to_string(rand() % NumFiles) + ".ll";
   std::string func = SS.str();
-  func.replace(func.find(BaseName), BaseName.length(), ss.str());
-  int fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
+
+  int fd;
+  if (OneFuncPerFile) {
+    std::stringstream ss;
+    ss << BaseName << std::to_string(Id);
+    func.replace(func.find(BaseName), BaseName.length(), "slice");
+    std::string FN = BaseName + std::to_string(Id) + ".ll";
+    fd = open(FN.c_str(), O_RDWR | O_CREAT | O_EXCL, S_IREAD | S_IWRITE);
+  } else {
+    std::stringstream ss;
+    ss << BaseName << std::to_string(Id);
+    func.replace(func.find(BaseName), BaseName.length(), ss.str());
+    std::string FN = std::to_string(rand() % NumFiles) + ".ll";
+    fd = open(FN.c_str(), O_RDWR | O_CREAT | O_APPEND, S_IREAD | S_IWRITE);
+  }
   if (fd < 2)
     die("open failed");
+
   /*
-   * fun hack -- instead of locking the file we're going to count on an atomic
-   * write and bail if it doesn't work -- this works fine on Linux
+   * hack -- instead of locking the file we're just going to count on
+   * an atomic write and bail if it doesn't work -- this seems to work
+   * fine on Linux and OS X
    */
   unsigned res = write(fd, func.c_str(), func.length());
   if (res != func.length())

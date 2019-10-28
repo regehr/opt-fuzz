@@ -1,12 +1,15 @@
 set -e
 
+OPTFUZZ=$HOME/opt-fuzz
+
+# filename
 BASE=all
 
 # this has to be the native width used by opt-fuzz
 WIDTH=32
 
 # opt-fuzz emits too many arguments, get rid of unneeded ones
-opt -strip ${BASE}.bc -S -o - | ~/alive2/scripts/test-llvm-backends/unused-arg-elimination.pl | opt -strip -S -o ${BASE}-stripped.ll
+opt -strip ${BASE}.ll -S -o - | ${OPTFUZZ}/scripts/test-llvm-backends/unused-arg-elimination.pl | opt -strip -S -o ${BASE}-stripped.ll
 
 # IR -> object code
 clang -c -O ${BASE}-stripped.ll -o ${BASE}.o

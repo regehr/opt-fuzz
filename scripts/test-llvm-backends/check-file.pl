@@ -23,6 +23,10 @@ my ($base, $dirs, $suffix) = fileparse($inf, keys %suffixes);
 die "expected LLVM IR" unless exists $suffixes{$suffix};
 $base = $dirs . $base;
 
+open my $LOG, ">${base}.log" or die;
+print $LOG "==== checking $inf ====\n";
+close $LOG;
+
 # opt-fuzz emits too many arguments, get rid of unneeded ones
 system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${base}-stripped.ll";
 
@@ -44,6 +48,8 @@ if (1) {
         }
     }
     close $INF;
+    # no sense proceeding if we didn't end up at a ret
+    die unless substr($bytes, -2) eq "c3";
     print "object code: $bytes\n";
     open $INF, "<${base}-stripped.ll" or die;
     my $nargs = -1;
@@ -101,4 +107,4 @@ if (0) {
 # system "~/alive2/scripts/test-llvm-backends/maskret.pl $WIDTH < ${base}-decomp.ll | opt -strip -S -o ${base}-decomp2.ll";
 
 # translation validation
-system "${ALIVE} ${base}-stripped.ll ${base}-decomp.ll ${ALIVEFLAGS} > ${base}.log 2>&1";
+system "${ALIVE} ${base}-stripped.ll ${base}-decomp.ll ${ALIVEFLAGS} >> ${base}.log 2>&1";

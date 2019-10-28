@@ -53,25 +53,25 @@ using namespace llvm;
 
 namespace {
 
-cl::opt<int>
-    Cores("cores", cl::desc("How many cores to use (default=1)"), cl::init(1));
+cl::opt<int> Cores("cores", cl::desc("How many cores to use (default=1)"),
+                   cl::init(1));
 
 cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
-                      cl::init(2));
+               cl::init(2));
 
-cl::opt<int>
-    N("num-insns", cl::desc("Number of instructions (default=2)"), cl::init(2));
+cl::opt<int> N("num-insns", cl::desc("Number of instructions (default=2)"),
+               cl::init(2));
 
-cl::opt<int>
-    Promote("promote",
-            cl::desc("Promote narrower arguments and return values to this width (default=no promotion)"),
-            cl::init(-1));
+cl::opt<int> Promote("promote",
+                     cl::desc("Promote narrower arguments and return values to "
+                              "this width (default=no promotion)"),
+                     cl::init(-1));
 
 cl::opt<bool>
     GenerateUndef("generate-undef",
                   cl::desc("Generate explicit undef inputs (default=false)"),
                   cl::init(false));
-  
+
 cl::opt<std::string>
     BaseName("base",
              cl::desc("Base name for emitted functions (default=\"func\")"),
@@ -79,14 +79,15 @@ cl::opt<std::string>
 
 cl::opt<bool>
     ArgsFromMem("args-from-memory",
-		cl::desc("Function arguments come from memory instead of calling convention (default=false)"),
-		cl::init(false));
-  
-cl::opt<bool>
-    RetToMem("return-to-memory",
-	       cl::desc("Function return values go to memory instead of calling convention (default=false)"),
-	       cl::init(false));
-  
+                cl::desc("Function arguments come from memory instead of "
+                         "calling convention (default=false)"),
+                cl::init(false));
+
+cl::opt<bool> RetToMem("return-to-memory",
+                       cl::desc("Function return values go to memory instead "
+                                "of calling convention (default=false)"),
+                       cl::init(false));
+
 cl::opt<bool>
     Branch("branches",
            cl::desc("Generate branches (default=false) (broken don't use)"),
@@ -94,25 +95,30 @@ cl::opt<bool>
 
 cl::opt<bool>
     UseIntrinsics("use-intrinsics",
-           cl::desc("Generate intrinsics like ctpop (default=true)"),
-           cl::init(true));
+                  cl::desc("Generate intrinsics like ctpop (default=true)"),
+                  cl::init(true));
 
 cl::opt<int> NumFiles("num-files",
-                             cl::desc("Number of output files (default=1000)"),
-                             cl::init(1000));
+                      cl::desc("Number of output files (default=1000)"),
+                      cl::init(1000));
 
 cl::opt<bool>
-    OneICmp("oneicmp", cl::desc("Only emit one kind of icmp (default=false)"),
-            cl::init(false));
+    OneFuncPerFile("one-func-per-file",
+                   cl::desc("emit at most one function per output file, "
+                            "subsumes --num-files (default=false)"),
+                   cl::init(false));
 
-cl::opt<bool>
-    OneBinop("onebinop",
-             cl::desc("Only emit one kind of binop (default=false)"),
-             cl::init(false));
+cl::opt<bool> OneICmp("oneicmp",
+                      cl::desc("Only emit one kind of icmp (default=false)"),
+                      cl::init(false));
 
-cl::opt<bool>
-    NoUB("noub", cl::desc("Do not put UB flags on binops (default=false)"),
-         cl::init(false));
+cl::opt<bool> OneBinop("onebinop",
+                       cl::desc("Only emit one kind of binop (default=false)"),
+                       cl::init(false));
+
+cl::opt<bool> NoUB("noub",
+                   cl::desc("Do not put UB flags on binops (default=false)"),
+                   cl::init(false));
 
 cl::opt<bool>
     Geni1("geni1",
@@ -125,9 +131,8 @@ cl::opt<bool>
                        "few selected constants (default=false)"),
               cl::init(false));
 
-cl::opt<bool> Verify("verify",
-                            cl::desc("Run the LLVM verifier (default=true)"),
-                            cl::init(true));
+cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier (default=true)"),
+                     cl::init(true));
 
 #define MAX_DEPTH 100
 
@@ -256,8 +261,7 @@ std::set<Value *> UsedArgs;
 std::vector<BasicBlock *> BBs;
 std::vector<BranchInst *> Branches;
 
-Value *genVal(int &Budget, int Width, bool ConstOK,
-                     bool ArgOK = true);
+Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK = true);
 
 void gen2(Value *&L, Value *&R, int &Budget, int Width) {
   L = genVal(Budget, Width, true);
@@ -272,21 +276,22 @@ void gen2(Value *&L, Value *&R, int &Budget, int Width) {
 std::vector<Value *> gen3(int &Budget, int Width) {
   auto A = genVal(Budget, Width, true);
   auto B = genVal(Budget, Width, true);
-  auto C = genVal(Budget, Width, (!isa<Constant>(A) && !isa<UndefValue>(A)) ||
-                                 (!isa<Constant>(B) && !isa<UndefValue>(B)));
+  auto C = genVal(Budget, Width,
+                  (!isa<Constant>(A) && !isa<UndefValue>(A)) ||
+                      (!isa<Constant>(B) && !isa<UndefValue>(B)));
   switch (rand() % 5) {
   case 0:
-    return std::vector{ A, B, C };
+    return std::vector{A, B, C};
   case 1:
-    return std::vector{ A, C, B };
+    return std::vector{A, C, B};
   case 2:
-    return std::vector{ B, A, C };
+    return std::vector{B, A, C};
   case 3:
-    return std::vector{ B, C, A };
+    return std::vector{B, C, A};
   case 4:
-    return std::vector{ C, A, B };
+    return std::vector{C, A, B};
   case 5:
-    return std::vector{ C, B, A };
+    return std::vector{C, B, A};
   }
   assert(false);
 }
@@ -303,13 +308,7 @@ APInt randAPInt(int Width) {
 }
 
 bool okForBitIntrinsic(int W) {
-  return
-    W == 8 ||
-    W == 16 ||
-    W == 32 ||
-    W == 64 ||
-    W == 128 ||
-    W == 256;
+  return W == 8 || W == 16 || W == 32 || W == 64 || W == 128 || W == 256;
 }
 
 Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
@@ -339,7 +338,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     return V;
   }
 
-  if (UseIntrinsics && Budget > 0 && Width == W && okForBitIntrinsic(Width) && Choose(2)) {
+  if (UseIntrinsics && Budget > 0 && Width == W && okForBitIntrinsic(Width) &&
+      Choose(2)) {
     --Budget;
     std::vector<Value *> A;
     std::vector<Type *> T;
@@ -374,7 +374,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     Vals.push_back(V);
     return V;
   }
-  
+
   if (Budget > 0 && Width == W && Choose(2)) {
     --Budget;
     Value *L, *R;
@@ -539,9 +539,9 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
 
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
     --Budget;
-    std::vector<Value *>Args = gen3(Budget, Width);
+    std::vector<Value *> Args = gen3(Budget, Width);
     Intrinsic::ID ID = Choose(2) ? Intrinsic::fshl : Intrinsic::fshr;
-    std::vector<Type *>T { Type::getIntNTy(C, Width) };
+    std::vector<Type *> T{Type::getIntNTy(C, Width)};
     Value *V = Builder->CreateIntrinsic(ID, T, Args);
     assert(V);
     Vals.push_back(V);
@@ -588,7 +588,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     else
       return V1;
   }
-  
+
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
     --Budget;
     Intrinsic::ID ID;
@@ -640,13 +640,12 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
       case 6:
         return ConstantInt::get(C, APInt::getSignedMinValue(Width));
       case 7:
-      again:
-        {
-          auto i = APInt(Width, (rand()%(10 + (2 * Width)))-(5 + Width));
-          if (i == -1 || i == 0 || i == 1 || i == 2)
-            goto again;
-          return ConstantInt::get(C, i);
-        }
+      again : {
+        auto i = APInt(Width, (rand() % (10 + (2 * Width))) - (5 + Width));
+        if (i == -1 || i == 0 || i == 1 || i == 2)
+          goto again;
+        return ConstantInt::get(C, i);
+      }
       case 8:
         return UndefValue::get(Type::getIntNTy(C, Width));
       default:
@@ -725,8 +724,9 @@ BasicBlock *chooseTarget(BasicBlock *Avoid = 0) {
 }
 
 std::vector<Value *> globs;
-  
-void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy) {
+
+void makeArg(int W, std::vector<Type *> &ArgsTy,
+             std::vector<Type *> &RealArgsTy) {
   int RealW = W;
   if (Promote != -1 && Promote > W)
     RealW = Promote;
@@ -734,9 +734,10 @@ void makeArg(int W, std::vector<Type *> &ArgsTy, std::vector<Type *> &RealArgsTy
   auto T = IntegerType::getIntNTy(C, RealW);
   RealArgsTy.push_back(T);
   if (ArgsFromMem) {
-    GlobalVariable *g = new GlobalVariable(*M, T, /*isConstant=*/false,
-                                           /*Linkage=*/GlobalValue::ExternalLinkage,
-                                           /*Initializer=*/0);
+    GlobalVariable *g =
+        new GlobalVariable(*M, T, /*isConstant=*/false,
+                           /*Linkage=*/GlobalValue::ExternalLinkage,
+                           /*Initializer=*/0);
     globs.push_back(g);
   }
 }
@@ -874,7 +875,7 @@ void output() {
 }
 
 } // namespace
-  
+
 int main(int argc, char **argv) {
   PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");

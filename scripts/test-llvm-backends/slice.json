@@ -1,0 +1,46 @@
+{
+  "arch": "amd64",
+  "os": "linux",
+  "functions": [
+    {
+      "address": 0,
+      "name": "slice",
+      "parameters": [
+        {
+          "name": "edi",
+          "type": "I",
+          "register": "EDI"
+        }
+      ],
+      "return_address": {
+        "memory": {
+          "register": "RSP"
+        },
+        "type": "I"
+      },
+      "return_values": [
+        {
+          "register": "RAX",
+          "type": "L"
+        }
+      ],
+      "return_stack_pointer": {
+        "register": "RSP",
+        "offset": 8
+      }
+    }
+  ],
+  "stack": {
+    "address": 140732920754176,
+    "size": 24576,
+    "start_offset": 4096
+  },
+  "memory": [
+    {
+      "address": 0,
+      "data": "4869c74d010000c3",
+      "is_readable": true,
+      "is_executable": true
+    }
+  ]
+}

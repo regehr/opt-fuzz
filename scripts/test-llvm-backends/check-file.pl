@@ -37,7 +37,7 @@ if (1) {
     open my $INF, "objdump -d ${base}.o |" or die;
     my $bytes = "";
     while (my $line = <$INF>) {
-        if ($line =~ /[0-9a-f]+:\s+(([0-9a-f][0-9a-f] )+)\s+[a-zA-Z]/) {
+        if ($line =~ /[0-9a-f]+:\s+(([0-9a-f][0-9a-f] )+)\s+/) {
             my $asm = $1;
             $asm =~ s/ //g;
             $bytes .= $asm;

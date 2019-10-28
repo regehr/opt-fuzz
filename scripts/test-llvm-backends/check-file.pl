@@ -8,7 +8,9 @@ my $OPTFUZZ = $ENV{"HOME"}."/opt-fuzz";
 my $WIDTH = 32;
 
 my $ANVILL = $ENV{"HOME"}."/remill-build/tools/anvill/anvill-decompile-json-8.0";
+
 my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
+my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
 
@@ -43,7 +45,18 @@ if (1) {
     }
     close $INF;
     print "object code: $bytes\n";
-    open $INF, "<${SCRIPTS}/slice.json" or die;
+    open $INF, "<${base}-stripped.ll" or die;
+    my $nargs = -1;
+    while (my $line = <$INF>) {
+        if ($line =~ /define/ && $line =~ /slice/) {
+            $nargs = 0;
+            for (my $i = 0; $i < length($line); $i++) {
+                $nargs++ if (substr($line, $i, 1) eq "%");
+            }
+        }
+    }
+    close $INF;
+    open $INF, "<${SCRIPTS}/slice-${nargs}arg.json" or die;
     open my $OUTF, ">slice2.json" or die;
     while (my $line = <$INF>) {
         $line =~ s/CODEGOESHERE/$bytes/;
@@ -87,4 +100,4 @@ if (0) {
 # system "~/alive2/scripts/test-llvm-backends/maskret.pl $WIDTH < ${base}-decomp.ll | opt -strip -S -o ${base}-decomp2.ll";
 
 # translation validation
-system "${ALIVE} ${base}-stripped.ll ${base}-decomp.ll --disable-poison-input --disable-undef-input";
+system "${ALIVE} ${base}-stripped.ll ${base}-decomp.ll ${ALIVEFLAGS} > ${base}.log 2>&1";

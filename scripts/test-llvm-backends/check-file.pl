@@ -4,8 +4,11 @@ use strict;
 use autodie;
 use File::Basename;
 
-my $OPTFUZZ=$ENV{"HOME"}."/opt-fuzz";
+my $OPTFUZZ = $ENV{"HOME"}."/opt-fuzz";
 my $WIDTH = 32;
+
+my $ANVILL = $ENV{"HOME"}."/remill-build/tools/anvill/anvill-decompile-json-8.0";
+my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
 
@@ -22,7 +25,7 @@ $base = $dirs . $base;
 system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${base}-stripped.ll";
 
 # IR -> object code
-system "clang -c -O ${base}-stripped.ll -o ${base}.o";
+system "clang -w -c -O ${base}-stripped.ll -o ${base}.o";
 
 ####################################################
 # object code -> IR, run one of these
@@ -48,6 +51,19 @@ if (1) {
     }    
     close $INF;
     close $OUTF;
+    system "${ANVILL} --spec slice2.json  --bc_out ${base}-decomp.bc >/dev/null 2>&1";
+    open $INF, "llvm-dis ${base}-decomp.bc -o - |" or die;
+    open $OUTF, "| opt -O2 -S -o - >${base}-decomp.ll" or die;
+    while (my $line = <$INF>) {
+        if (($line =~ /tail call/ &&
+             $line =~ /remill_function_return/) ||
+            $line =~ /target triple/) {
+        } else {
+            print $OUTF $line;
+        }
+    }
+    close $INF;
+    close $OUTF;
 }
 
 # MCTOLL
@@ -65,12 +81,10 @@ if (0) {
 
 ####################################################
 
-exit 0;
-
 # ABI allows unused bits of return to be trashed; add an instruction
 # masking these bits off. also strip out whatever register names the
 # decompiler decided to use.
-system "~/alive2/scripts/test-llvm-backends/maskret.pl $WIDTH < ${base}-decomp.ll | opt -strip -S -o ${base}-decomp2.ll";
+# system "~/alive2/scripts/test-llvm-backends/maskret.pl $WIDTH < ${base}-decomp.ll | opt -strip -S -o ${base}-decomp2.ll";
 
 # translation validation
-system "~/alive2/build/alive-tv ${base}-stripped.ll ${base}-decomp2.ll --disable-poison-input --disable-undef-input";
+system "${ALIVE} ${base}-stripped.ll ${base}-decomp.ll --disable-poison-input --disable-undef-input";

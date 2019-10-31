@@ -37,7 +37,7 @@ system "clang -w -c -O ${base}-stripped.ll -o ${base}.o";
 # object code -> IR, run one of these
 
 # ANVILL
-if (0) {
+if (1) {
     open my $INF, "objdump -d ${base}.o |" or die;
     my $bytes = "";
     while (my $line = <$INF>) {
@@ -95,8 +95,8 @@ if (0) {
 }
 
 # MCTOLL
-if (1) {
-    system "llvm-mctoll ${base}.o -o ${base}-decomp.ll > ${base}.log 2>&1";
+if (0) {
+    system "llvm-mctoll ${base}.o -o - | opt -O2 -S -o ${base}-decomp.ll 2> ${base}.log";
 }
 
 # RETDEC

@@ -756,6 +756,14 @@ void makeArg(int W, std::vector<Type *> &ArgsTy,
   }
 }
 
+void addArg(Value *a, int W, std::vector<Type *> &ArgsTy) {
+  assert(a);
+  if (Promote != -1 && Promote > W)
+    Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));
+  else
+    Args.push_back(a);
+}
+
 void generate() {
   M = new Module("", C);
   std::vector<Type *> ArgsTy, RealArgsTy, MT;
@@ -777,18 +785,18 @@ void generate() {
   int Budget = N;
   Builder->SetInsertPoint(BBs[0]);
 
-  for (unsigned i = 0; i < ArgsTy.size(); ++i) {
-    Value *a;
-    if (ArgsFromMem)
-      a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
-    else
-      a = F->getArg(i);
-    assert(a);
-    int W = ArgsTy.at(i)->getPrimitiveSizeInBits();
-    if (Promote != -1 && Promote > W)
-      Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));
-    else
-      Args.push_back(a);
+  if (ArgsFromMem) {
+    for (unsigned i = 0; i < ArgsTy.size(); ++i) {
+      Value *a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
+      int W = ArgsTy.at(i)->getPrimitiveSizeInBits();
+      addArg(a, W, ArgsTy);
+    }
+  } else {
+    unsigned i = 0;
+    for (auto it = F->arg_begin(); it != F->arg_end(); ++i, ++it) {
+      int W = ArgsTy.at(i)->getPrimitiveSizeInBits();
+      addArg(it, W, ArgsTy);
+    }
   }
 
   // the magic happens in genVal()

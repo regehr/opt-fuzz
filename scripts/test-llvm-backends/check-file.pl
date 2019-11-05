@@ -10,7 +10,7 @@ my $WIDTH = 32;
 my $ANVILL = $ENV{"HOME"}."/remill-build/tools/anvill/anvill-decompile-json-8.0";
 
 my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
-my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input";
+my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --tv-smt-to=90000";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
 
@@ -71,15 +71,20 @@ if (1) {
     }    
     close $INF;
     close $OUTF;
-    system "${ANVILL} --spec ${base}.json  --bc_out ${base}-decomp.bc >/dev/null 2>&1";
+    system "${ANVILL} --spec ${base}.json  --bc_out ${base}-decomp.bc >${base}.log 2>&1";
     open $INF, "llvm-dis ${base}-decomp.bc -o - |" or die;
     open $OUTF, "| opt -O2 -S -o - >${base}-decomp.ll" or die;
     while (my $line = <$INF>) {
         next if ($line =~ /target triple/);
-        if ($line =~ /(\%[0-9]+) = tail call/) {
+        if ($line =~ /(\%[0-9]+) = (tail )?call/) {
             my $var = $1;
             if ($line =~ /remill_function_return/) {
                 print $OUTF "${var} = add i32 0, 0\n";
+                next;
+            }
+            if ($line =~ /remill_error/) {
+                die unless $line =~ s/%struct.State\*.*?,/%struct.State\* null,/;
+                print $OUTF $line;
                 next;
             }
         }
@@ -90,6 +95,9 @@ if (1) {
 }
 
 # MCTOLL
+if (0) {
+    system "llvm-mctoll ${base}.o -o - | opt -O2 -S -o ${base}-decomp.ll 2> ${base}.log";
+}
 
 # RETDEC
 if (0) {

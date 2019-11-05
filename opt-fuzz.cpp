@@ -72,6 +72,13 @@ cl::opt<bool>
                   cl::desc("Generate explicit undef inputs (default=false)"),
                   cl::init(false));
 
+#if LLVM_VERSION_MAJOR >= 10
+cl::opt<bool>
+    GenerateFreeze("generate-freeze",
+                  cl::desc("Generate freeze (default=true)"),
+                  cl::init(true));
+#endif
+
 cl::opt<std::string>
     BaseName("base",
              cl::desc("Base name for emitted functions (default=\"func\")"),
@@ -615,6 +622,13 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     Vals.push_back(V);
     return V;
   }
+
+#if LLVM_VERSION_MAJOR >= 10
+  if (GenerateFreeze && Budget > 0 && Choose(2)) {
+    --Budget;
+    return Builder->CreateFreeze(genVal(Budget, W, false));
+  }
+#endif
 
   /*
    * from this point on we're not generating instructions and hence

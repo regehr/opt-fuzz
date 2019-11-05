@@ -1,5 +1,5 @@
 N=1
-OPTFUZZ=/home/regehr/opt-fuzz/build/opt-fuzz
+OPTFUZZ=$HOME/opt-fuzz/build/opt-fuzz
 ARGS='--cores=10 --fewconsts --promote=64 --one-func-per-file'
 
 $OPTFUZZ $ARGS --width=8 --num-insns=$N --base="w8_"

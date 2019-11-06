@@ -7,10 +7,18 @@ use File::Basename;
 my $OPTFUZZ = $ENV{"HOME"}."/opt-fuzz";
 my $WIDTH = 32;
 
+#my $ARCH = "x86-64";
+#my $AS = "as";
+#my $OBJDUMP = "objdump";
+
+my $ARCH = "arm64";
+my $AS = "aarch64-linux-gnu-as";
+my $OBJDUMP = "aarch64-linux-gnu-objdump";
+
 my $ANVILL = $ENV{"HOME"}."/remill-build/tools/anvill/anvill-decompile-json-8.0";
 
 my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
-my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --tv-smt-to=90000";
+my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=90000";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
 
@@ -31,39 +39,54 @@ close $LOG;
 system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${base}-stripped.ll";
 
 # IR -> object code
-system "clang -w -c -O ${base}-stripped.ll -o ${base}.o";
-
+system "llc -march=${ARCH} ${base}-stripped.ll -o ${base}.s";
+system "${AS} ${base}.s -o ${base}.o";
+    
 ####################################################
 # object code -> IR, run one of these
 
 # ANVILL
 if (1) {
-    open my $INF, "objdump -d ${base}.o |" or die;
+    open my $INF, "${OBJDUMP} -d ${base}.o |" or die;
     my $bytes = "";
-    while (my $line = <$INF>) {
-        if ($line =~ /[0-9a-f]+:\s+(([0-9a-f][0-9a-f] )+)\s+/) {
-            my $asm = $1;
-            $asm =~ s/ //g;
-            $bytes .= $asm;
+
+    if ($ARCH eq "x86-64") {
+        while (my $line = <$INF>) {
+            if ($line =~ /[0-9a-f]+:\s+(([0-9a-f][0-9a-f] )+)\s+/) {
+                my $asm = $1;
+                $asm =~ s/ //g;
+                $bytes .= $asm;
+            }
         }
+        close $INF;
+        # no sense proceeding if we didn't end up at a ret
+        die unless substr($bytes, -2) eq "c3";
+    } elsif ($ARCH eq "arm64") {
+        while (my $line = <$INF>) {
+            if ($line =~ /[0-9a-f]+:\s+([0-9a-f]{8})+\s+/) {
+                my $asm = $1;
+                $bytes .= $asm;
+            }
+        }
+        close $INF;
+    } else {
+        die "unknown arch";
     }
-    close $INF;
-    # no sense proceeding if we didn't end up at a ret
-    die unless substr($bytes, -2) eq "c3";
+    
     print "object code: $bytes\n";
     open $INF, "<${base}-stripped.ll" or die;
-    my $nargs = -1;
+    my $nargs = 0;
     while (my $line = <$INF>) {
         if ($line =~ /define/ && $line =~ /slice/) {
-            $nargs = 0;
             for (my $i = 0; $i < length($line); $i++) {
-                $nargs++ if (substr($line, $i, 1) eq "%");
+                $nargs++ if (substr($line, $i, 1) eq ",");
             }
         }
     }
+    $nargs++;
     close $INF;
     print "detected $nargs function arguments\n";
-    open $INF, "<${SCRIPTS}/slice-${nargs}arg.json" or die;
+    open $INF, "<${SCRIPTS}/${ARCH}-${nargs}arg.json" or die;
     open my $OUTF, ">${base}.json" or die;
     while (my $line = <$INF>) {
         $line =~ s/CODEGOESHERE/$bytes/;

@@ -1,6 +1,6 @@
 N=1
 OPTFUZZ=$HOME/opt-fuzz/build/opt-fuzz
-ARGS='--cores=10 --fewconsts --promote=64 --one-func-per-file --use-intrinsics=false'
+ARGS='--cores=10 --fewconsts --promote=64 --one-func-per-file --use-intrinsics=true'
 
 #$OPTFUZZ $ARGS --width=8 --num-insns=$N --base="w8_"
 #$OPTFUZZ $ARGS --width=16 --num-insns=$N --base="w16_"

@@ -23,8 +23,12 @@ my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
 my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=90000";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
+my $OUTPUT = "output";
 
 ##########################################################################################
+
+mkdir($OUTPUT) unless -d $OUTPUT;
+die unless -d $OUTPUT;
 
 my $inf = $ARGV[0];
 die unless -f $inf;
@@ -35,16 +39,16 @@ my ($base, $dirs, $suffix) = fileparse($inf, keys %suffixes);
 die "expected LLVM IR" unless exists $suffixes{$suffix};
 $base = $dirs . $base;
 
-open my $LOG, ">${base}.log" or die;
+open my $LOG, ">${OUTPUT}/${base}.log" or die;
 print $LOG "==== checking $inf ====\n";
 close $LOG;
 
 # opt-fuzz emits too many arguments, get rid of unneeded ones
-system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${base}-stripped.ll";
+system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${OUTPUT}/${base}-stripped.ll";
 
 # IR -> object code
-system "llc -global-isel -march=${ARCH} ${base}-stripped.ll -o ${base}.s";
-system "${AS} ${base}.s -o ${base}.o";
+system "llc -global-isel -march=${ARCH} ${OUTPUT}/${base}-stripped.ll -o ${OUTPUT}/${base}.s";
+system "${AS} ${OUTPUT}/${base}.s -o ${OUTPUT}/${base}.o";
 
 sub bswap($) {
     (my $s) = @_;
@@ -62,7 +66,7 @@ sub bswap($) {
 
 # ANVILL
 if (1) {
-    open my $INF, "${OBJDUMP} -d ${base}.o |" or die;
+    open my $INF, "${OBJDUMP} -d ${OUTPUT}/${base}.o |" or die;
     my $bytes = "";
 
     if ($ARCH eq "x86-64") {
@@ -89,7 +93,7 @@ if (1) {
     }
     
     print "object code: $bytes\n";
-    open $INF, "<${base}-stripped.ll" or die;
+    open $INF, "<${OUTPUT}/${base}-stripped.ll" or die;
     my $nargs = 0;
     while (my $line = <$INF>) {
         if ($line =~ /define/ && $line =~ /slice/) {
@@ -102,16 +106,16 @@ if (1) {
     close $INF;
     print "detected $nargs function arguments\n";
     open $INF, "<${SCRIPTS}/${ARCH}-${nargs}arg.json" or die;
-    open my $OUTF, ">${base}.json" or die;
+    open my $OUTF, ">${OUTPUT}/${base}.json" or die;
     while (my $line = <$INF>) {
         $line =~ s/CODEGOESHERE/$bytes/;
         print $OUTF $line;
     }    
     close $INF;
     close $OUTF;
-    system "${ANVILL} --spec ${base}.json  --bc_out ${base}-decomp.bc >${base}.log 2>&1";
-    open $INF, "llvm-dis ${base}-decomp.bc -o - |" or die;
-    open $OUTF, "| opt -O2 -S -o - >${base}-decomp.ll" or die;
+    system "${ANVILL} --spec ${OUTPUT}/${base}.json  --bc_out ${OUTPUT}/${base}-decomp.bc >${OUTPUT}/${base}.log 2>&1";
+    open $INF, "llvm-dis ${OUTPUT}/${base}-decomp.bc -o - |" or die;
+    open $OUTF, "| opt -O2 -S -o - >${OUTPUT}/${base}-decomp.ll" or die;
     while (my $line = <$INF>) {
         next if ($line =~ /target triple/);
         if ($line =~ /(\%[0-9]+) = (tail )?call/) {
@@ -156,6 +160,6 @@ if (0) {
 # system "~/alive2/scripts/test-llvm-backends/maskret.pl $WIDTH < ${base}-decomp.ll | opt -strip -S -o ${base}-decomp2.ll";
 
 # translation validation
-system "${ALIVE} ${base}-stripped.ll ${base}-decomp.ll ${ALIVEFLAGS} >> ${base}.log 2>&1";
+system "${ALIVE} ${OUTPUT}/${base}-stripped.ll ${OUTPUT}/${base}-decomp.ll ${ALIVEFLAGS} >> ${OUTPUT}/${base}.log 2>&1";
 
 ##########################################################################################

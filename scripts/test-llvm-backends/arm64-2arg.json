@@ -3,7 +3,7 @@
   "functions": [
     {
       "return_stack_pointer": {"register": "SP", "type": "L", "offset": 0}, 
-      "name": "test", 
+      "name": "slice", 
       "parameters": [
         {"register": "X0", "type": "l"},
         {"register": "X1", "type": "l"}

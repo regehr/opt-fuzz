@@ -3,11 +3,9 @@
   "functions": [
     {
       "return_stack_pointer": {"register": "SP", "type": "L", "offset": 0}, 
-      "name": "test", 
+      "name": "slice", 
       "parameters": [
-        {"register": "X0", "type": "l"},
-        {"register": "X1", "type": "l"},
-        {"register": "X2", "type": "l"},
+        {"register": "X0", "type": "l"}
       ], 
       "return_address": {"register": "X0", "type": "L"}, 
       "return_values": [
@@ -21,7 +19,7 @@
   "memory": [
     {
       "is_writeable": false, 
-      "data": "ff4300d1e00700f9e1130039e00740f9e1134039e803012a0800088be1134039e003012a007c40d30021c09aff430091c0035fd6",
+      "data": "CODEGOESHERE",
       "is_executable": true,
       "is_readable": true,
       "address": 0

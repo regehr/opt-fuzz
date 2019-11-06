@@ -4,6 +4,8 @@ use strict;
 use autodie;
 use File::Basename;
 
+##########################################################################################
+
 my $OPTFUZZ = $ENV{"HOME"}."/opt-fuzz";
 my $WIDTH = 32;
 
@@ -22,6 +24,8 @@ my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=90000";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
 
+##########################################################################################
+
 my $inf = $ARGV[0];
 die unless -f $inf;
 
@@ -39,10 +43,21 @@ close $LOG;
 system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${base}-stripped.ll";
 
 # IR -> object code
-system "llc -march=${ARCH} ${base}-stripped.ll -o ${base}.s";
+system "llc -global-isel -march=${ARCH} ${base}-stripped.ll -o ${base}.s";
 system "${AS} ${base}.s -o ${base}.o";
+
+sub bswap($) {
+    (my $s) = @_;
+    my $swapped = "";
+    while ($s ne "") {
+        my $x = substr($s, -2, 2);
+        substr($s, -2, 2) = "";
+        $swapped .= $x;
+    }
+    return $swapped;
+}
     
-####################################################
+##########################################################################################
 # object code -> IR, run one of these
 
 # ANVILL
@@ -65,7 +80,7 @@ if (1) {
         while (my $line = <$INF>) {
             if ($line =~ /[0-9a-f]+:\s+([0-9a-f]{8})+\s+/) {
                 my $asm = $1;
-                $bytes .= $asm;
+                $bytes .= bswap($asm);
             }
         }
         close $INF;
@@ -133,7 +148,7 @@ if (0) {
     system "reopt --header=protos.h --llvm ${base}.o > ${base}-decomp.ll";
 }
 
-####################################################
+##########################################################################################
 
 # ABI allows unused bits of return to be trashed; add an instruction
 # masking these bits off. also strip out whatever register names the
@@ -142,3 +157,5 @@ if (0) {
 
 # translation validation
 system "${ALIVE} ${base}-stripped.ll ${base}-decomp.ll ${ALIVEFLAGS} >> ${base}.log 2>&1";
+
+##########################################################################################

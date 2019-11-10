@@ -47,6 +47,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <variant>
 #include <vector>
 
 using namespace llvm;
@@ -94,6 +95,10 @@ cl::opt<bool> RetToMem("return-to-memory",
                        cl::desc("Function return values go to memory instead "
                                 "of calling convention (default=false)"),
                        cl::init(false));
+
+cl::opt<bool> ProfileTree("profile-tree",
+                       cl::desc("Print subtree sizes instead of generating LLVM IR (default=false)"),
+                       cl::init(false), cl::Hidden);
 
 cl::opt<bool>
     Branch("branches",
@@ -247,7 +252,7 @@ int Choose(int n) {
       Id = Shmem->NextId.fetch_add(1);
       Choices += std::to_string(i) + " ";
       ++Depth;
-      ::srand(::getpid());
+      ::srand(::getpid()); // FIXME!!! not getting randomness out of this?
       return i;
     }
     // parent
@@ -268,24 +273,27 @@ std::set<Value *> UsedArgs;
 std::vector<BasicBlock *> BBs;
 std::vector<BranchInst *> Branches;
 
-Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK = true);
+typedef std::variant<Value *, long> RetTyp;
 
-void gen2(Value *&L, Value *&R, int &Budget, int Width) {
+RetTyp genVal(int &Budget, int Width, bool ConstOK, bool ArgOK = true);
+
+void gen2(RetTyp &L, RetTyp &R, int &Budget, int Width) {
   L = genVal(Budget, Width, true);
-  R = genVal(Budget, Width, !isa<Constant>(L) && !isa<UndefValue>(L));
+  R = genVal(Budget, Width, ProfileTree ? true : !isa<Constant>(L) && !isa<UndefValue>(L));
   if ((rand() & 1) == 0) {
-    Value *T = L;
+    RetTyp T = L;
     L = R;
     R = T;
   }
 }
 
-std::vector<Value *> gen3(int &Budget, int Width) {
+// true pseudorandom, not BET
+std::vector<RetTyp> gen3(int &Budget, int Width) {
   auto A = genVal(Budget, Width, true);
   auto B = genVal(Budget, Width, true);
-  auto C = genVal(Budget, Width,
+  auto C = genVal(Budget, Width, ProfileTree ? true :
                   (!isa<Constant>(A) && !isa<UndefValue>(A)) ||
-                      (!isa<Constant>(B) && !isa<UndefValue>(B)));
+                  (!isa<Constant>(B) && !isa<UndefValue>(B)));
   switch (rand() % 5) {
   case 0:
     return std::vector{A, B, C};
@@ -318,15 +326,20 @@ bool okForBitIntrinsic(int W) {
   return W == 8 || W == 16 || W == 32 || W == 64 || W == 128 || W == 256;
 }
 
-Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
+RetTyp genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   if (Branch && Budget > 0 && Choose(2)) {
     --Budget;
-    Value *V = Builder->CreatePHI(Type::getIntNTy(C, Width), N);
-    assert(V);
-    Vals.push_back(V);
-    return V;
+    if (ProfileTree) {
+      return 1;
+    } else {
+      Value *V = Builder->CreatePHI(Type::getIntNTy(C, Width), N);
+      assert(V);
+      Vals.push_back(V);
+      return V;
+    }
   }
 
+#ifdef FIXME
   if (Branch && Budget > 0 && Budget != N && Choose(2)) {
     --Budget;
     BranchInst *Br;
@@ -344,6 +357,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     assert(V);
     return V;
   }
+#endif
 
   if (UseIntrinsics && Budget > 0 && Width == W && okForBitIntrinsic(Width) &&
       Choose(2)) {
@@ -359,12 +373,12 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
       break;
     case 1:
       if (Width != 16 && Width != 32 && Width != 64)
-        exit(0);
+        return ProfileTree ? 0 : exit(0);
       ID = Intrinsic::bitreverse;
       break;
     case 2:
       if (Width != 16 && Width != 32 && Width != 64)
-        exit(0);
+        return ProfileTree ? 0 : exit(0);
       ID = Intrinsic::bswap;
       break;
     case 3:
@@ -756,7 +770,7 @@ void makeArg(int W, std::vector<Type *> &ArgsTy,
   }
 }
 
-void addArg(Value *a, int W, std::vector<Type *> &ArgsTy) {
+void addArg(Value *a, int W) {
   assert(a);
   if (Promote != -1 && Promote > W)
     Args.push_back(Builder->CreateTrunc(a, IntegerType::getIntNTy(C, W)));
@@ -789,13 +803,13 @@ void generate() {
     for (unsigned i = 0; i < ArgsTy.size(); ++i) {
       Value *a = Builder->CreateLoad(RealArgsTy.at(i), globs.at(i));
       int W = ArgsTy.at(i)->getPrimitiveSizeInBits();
-      addArg(a, W, ArgsTy);
+      addArg(a, W);
     }
   } else {
     unsigned i = 0;
     for (auto it = F->arg_begin(); it != F->arg_end(); ++i, ++it) {
       int W = ArgsTy.at(i)->getPrimitiveSizeInBits();
-      addArg(it, W, ArgsTy);
+      addArg(it, W);
     }
   }
 

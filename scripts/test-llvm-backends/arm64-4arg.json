@@ -1,0 +1,31 @@
+{
+  "os": "linux", 
+  "functions": [
+    {
+      "return_stack_pointer": {"register": "SP", "type": "L", "offset": 0}, 
+      "name": "slice", 
+      "parameters": [
+        {"register": "X0", "type": "l"},
+        {"register": "X1", "type": "l"},
+        {"register": "X2", "type": "l"}
+        {"register": "X3", "type": "l"}
+      ], 
+      "return_address": {"register": "X0", "type": "L"}, 
+      "return_values": [
+        {"register": "X0", "type": "l"}
+      ], 
+      "address": 0
+    }
+  ],
+  "arch": "aarch64",
+  "stack": {"size": 24576, "start_offset": 4096, "address": 87960930222080},
+  "memory": [
+    {
+      "is_writeable": false, 
+      "data": "CODEGOESHERE",
+      "is_executable": true,
+      "is_readable": true,
+      "address": 0
+    }
+  ]
+}

@@ -20,7 +20,7 @@ my $OBJDUMP = "aarch64-linux-gnu-objdump";
 my $ANVILL = $ENV{"HOME"}."/remill-build/tools/anvill/anvill-decompile-json-8.0";
 
 my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
-my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=90000";
+my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=5000";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
 my $OUTPUT = "output";

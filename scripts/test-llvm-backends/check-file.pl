@@ -4,6 +4,8 @@ use strict;
 use autodie;
 use File::Basename;
 
+# TODO support multiple functions per bitcode file
+
 ##########################################################################################
 
 my $OPTFUZZ = $ENV{"HOME"}."/opt-fuzz";

@@ -14,8 +14,8 @@ Any verification failure represents a bug in LLVM or Alive.
 
 # Building
 
-Prereq: Clang/LLVM 10 is installed and in the PATH. If it is not, you
-can tell CMake where it is using the LLVM_DIR argument.
+Prereq: Clang/LLVM 8, 9, or 10 is installed and in the PATH. If it is
+not, you can tell CMake where it is using the LLVM_DIR argument.
 
 ```
 mkdir build

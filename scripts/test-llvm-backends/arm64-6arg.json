@@ -7,9 +7,9 @@
       "parameters": [
         {"register": "X0", "type": "l"},
         {"register": "X1", "type": "l"},
-        {"register": "X2", "type": "l"}
-        {"register": "X3", "type": "l"}
-        {"register": "X4", "type": "l"}
+        {"register": "X2", "type": "l"},
+        {"register": "X3", "type": "l"},
+        {"register": "X4", "type": "l"},
         {"register": "X5", "type": "l"}
       ], 
       "return_address": {"register": "X0", "type": "L"}, 

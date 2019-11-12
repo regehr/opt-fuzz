@@ -17,15 +17,23 @@ my $ARCH = "arm64";
 my $AS = "aarch64-linux-gnu-as";
 my $OBJDUMP = "aarch64-linux-gnu-objdump";
 
-my $ANVILL = $ENV{"HOME"}."/remill-build/tools/anvill/anvill-decompile-json-8.0";
+my $ANVILL = $ENV{"HOME"}."/remill-build-llvm10/tools/anvill/anvill-decompile-json-10.0";
 
 my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
-my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=5000";
+my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=2000";
 
 my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
 my $OUTPUT = "output";
 
+my $DEBUG = 0;
+
 ##########################################################################################
+
+sub runit($) {
+    (my $cmd) = @_;
+    print "<< $cmd >>\n" if $DEBUG;
+    system $cmd;
+}
 
 mkdir($OUTPUT) unless -d $OUTPUT;
 die unless -d $OUTPUT;
@@ -44,11 +52,11 @@ print $LOG "==== checking $inf ====\n";
 close $LOG;
 
 # opt-fuzz emits too many arguments, get rid of unneeded ones
-system "opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${OUTPUT}/${base}-stripped.ll";
+runit("opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${OUTPUT}/${base}-stripped.ll");
 
 # IR -> object code
-system "llc -global-isel -march=${ARCH} ${OUTPUT}/${base}-stripped.ll -o ${OUTPUT}/${base}.s";
-system "${AS} ${OUTPUT}/${base}.s -o ${OUTPUT}/${base}.o";
+runit("llc -global-isel -march=${ARCH} ${OUTPUT}/${base}-stripped.ll -o ${OUTPUT}/${base}.s");
+runit("${AS} ${OUTPUT}/${base}.s -o ${OUTPUT}/${base}.o");
 
 sub bswap($) {
     (my $s) = @_;
@@ -113,7 +121,7 @@ if (1) {
     }    
     close $INF;
     close $OUTF;
-    system "${ANVILL} --spec ${OUTPUT}/${base}.json  --bc_out ${OUTPUT}/${base}-decomp.bc >${OUTPUT}/${base}.log 2>&1";
+    runit("${ANVILL} --spec ${OUTPUT}/${base}.json  --bc_out ${OUTPUT}/${base}-decomp.bc >${OUTPUT}/${base}.log 2>&1");
     open $INF, "llvm-dis ${OUTPUT}/${base}-decomp.bc -o - |" or die;
     open $OUTF, "| opt -O2 -S -o - >${OUTPUT}/${base}-decomp.ll" or die;
     while (my $line = <$INF>) {
@@ -138,18 +146,18 @@ if (1) {
 
 # MCTOLL
 if (0) {
-    system "llvm-mctoll ${base}.o -o - | opt -O2 -S -o ${base}-decomp.ll 2> ${base}.log";
+    runit("llvm-mctoll ${base}.o -o - | opt -O2 -S -o ${base}-decomp.ll 2> ${base}.log");
 }
 
 # RETDEC
 if (0) {
-    system "/home/regehr/retdec-install/bin/retdec-decompiler.py ${base}.o";
-    system "mv all.o.ll all-decomp.ll";
+    runit("/home/regehr/retdec-install/bin/retdec-decompiler.py ${base}.o");
+    runit("mv all.o.ll all-decomp.ll");
 }
 
 # REOPT
 if (0) {
-    system "reopt --header=protos.h --llvm ${base}.o > ${base}-decomp.ll";
+    runit("reopt --header=protos.h --llvm ${base}.o > ${base}-decomp.ll");
 }
 
 ##########################################################################################
@@ -157,9 +165,9 @@ if (0) {
 # ABI allows unused bits of return to be trashed; add an instruction
 # masking these bits off. also strip out whatever register names the
 # decompiler decided to use.
-# system "~/alive2/scripts/test-llvm-backends/maskret.pl $WIDTH < ${base}-decomp.ll | opt -strip -S -o ${base}-decomp2.ll";
+# runit("~/alive2/scripts/test-llvm-backends/maskret.pl $WIDTH < ${base}-decomp.ll | opt -strip -S -o ${base}-decomp2.ll";
 
 # translation validation
-system "${ALIVE} ${OUTPUT}/${base}-stripped.ll ${OUTPUT}/${base}-decomp.ll ${ALIVEFLAGS} >> ${OUTPUT}/${base}.log 2>&1";
+runit("${ALIVE} ${OUTPUT}/${base}-stripped.ll ${OUTPUT}/${base}-decomp.ll ${ALIVEFLAGS} >> ${OUTPUT}/${base}.log 2>&1");
 
 ##########################################################################################

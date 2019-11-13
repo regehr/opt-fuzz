@@ -57,7 +57,7 @@ close $LOG;
 runit("opt -strip $inf -S -o - | ${SCRIPTS}/unused-arg-elimination.pl | opt -strip -S -o ${OUTPUT}/${base}-stripped.ll");
 
 # IR -> object code
-runit("llc -global-isel -march=${ARCH} ${OUTPUT}/${base}-stripped.ll -o ${OUTPUT}/${base}.s");
+runit("llc -global-isel -global-isel-abort=2 -march=${ARCH} ${OUTPUT}/${base}-stripped.ll -o ${OUTPUT}/${base}.s");
 runit("${AS} ${OUTPUT}/${base}.s -o ${OUTPUT}/${base}.o");
 
 sub bswap($) {

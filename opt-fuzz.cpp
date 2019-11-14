@@ -624,7 +624,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   }
 
 #if LLVM_VERSION_MAJOR >= 10
-  if (GenerateFreeze && Budget > 0 && Choose(2)) {
+  if (Width == W && GenerateFreeze && Budget > 0 && Choose(2)) {
     --Budget;
     return Builder->CreateFreeze(genVal(Budget, W, false));
   }

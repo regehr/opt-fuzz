@@ -8,23 +8,23 @@ use File::Basename;
 
 ##########################################################################################
 
-my $OPTFUZZ = $ENV{"HOME"}."/opt-fuzz";
+my $DIR = $ENV{"HOME"}."/opt-fuzz";
 my $WIDTH = 32;
 
-#my $ARCH = "x86-64";
-#my $AS = "as";
-#my $OBJDUMP = "objdump";
+my $ARCH = "x86-64";
+my $AS = "as";
+my $OBJDUMP = "objdump";
 
-my $ARCH = "arm64";
-my $AS = "aarch64-linux-gnu-as";
-my $OBJDUMP = "aarch64-linux-gnu-objdump";
+#my $ARCH = "arm64";
+#my $AS = "aarch64-linux-gnu-as";
+#my $OBJDUMP = "aarch64-linux-gnu-objdump";
 
 my $ANVILL = $ENV{"HOME"}."/remill-build-llvm10/tools/anvill/anvill-decompile-json-10.0";
 
 my $ALIVE = $ENV{"HOME"}."/alive2/build/alive-tv";
 my $ALIVEFLAGS = "--disable-poison-input --disable-undef-input --smt-to=2000";
 
-my $SCRIPTS = "${OPTFUZZ}/scripts/test-llvm-backends";
+my $SCRIPTS = "${DIR}/scripts/test-llvm-backends";
 my $OUTPUT = "output";
 
 my $DEBUG = 0;

@@ -667,7 +667,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
       }
       return ConstantInt::get(C, APInt(Width, 1));
     } else {
-      int n = Choose((1 << Width) + GenerateUndef ? 1 : 0);
+      int n = Choose((1 << Width) + (GenerateUndef ? 1 : 0));
       if (n == (1 << Width))
         return UndefValue::get(Type::getIntNTy(C, Width));
       else

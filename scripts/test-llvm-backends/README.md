@@ -4,7 +4,9 @@ You should be working on a recent version of OS X or Linux.
 
 # Build alive2
 
-- build an LLVM with exception handling and RTTI enabled; you can make this
+- clone an LLVM, it should be the same version that you will build Anvill against
+
+- build LLVM with exception handling and RTTI enabled; you can make this
   happen with a cmake command similar to this one:
 
 ```
@@ -25,3 +27,18 @@ ninja
 ```
 ninja check
 ```
+
+# Build Anvill
+
+Follow external instructions to do this. You must end up with an
+executable called anvill-decompile-json-10.0 (or similar if you use an
+LLMV version other than 10).
+
+# Build opt-fuzz
+
+Clone this repo and build opt-fuzz against the same version of LLVM
+that you are using for alive2 and for Anvill.
+
+# Fixup paths
+
+The top-level program you will be running here is called `check-file.pl`

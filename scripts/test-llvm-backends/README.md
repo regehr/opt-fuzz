@@ -41,4 +41,31 @@ that you are using for alive2 and for Anvill.
 
 # Fixup paths
 
-The top-level program you will be running here is called `check-file.pl`
+The top-level program you will be running here is called
+`check-file.pl`.  It is located in the same directory as this
+README. Edit paths at the top of this file so that it can find your
+opt-fuzz, alive2, and anvill executables.
+
+This file also contains some variables that control which architecture
+you are compiling to. If you want to use ARM instead of the default
+x86-64, then you need to install an ARM toolchain and also adjust the
+variables near the top of `check-file.pl` to refer to ARM stuff
+instead.
+
+# Run a simple test
+
+Start with a very simple LLVM function such as this one:
+
+```
+```
+
+Use `check-file.pl` to verify that when it is compiled to x86-64 and
+then decompiled back to LLVM, the final LLVM IR is a refinememnt of
+the original IR:
+
+```
+./check-file test1.ll
+```
+
+# Run a more interesting set of tests
+

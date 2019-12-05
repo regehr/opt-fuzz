@@ -97,7 +97,32 @@ roundtrip through x86-64, we can see that the two functions actually
 differ: the original code contains the `nsw` qualifier which was
 inserted by Clang because signed overflow is undefined in C. The
 lifted IR, on the other hand, lacks this qualifier because at the CPU
-level the math is two's complement.
+level the math is two's complement. The lifted code refines the
+original code, but this transformation would not validate in the other
+direction.
 
 # Run a more interesting set of tests
 
+Ok, now use opt-fuzz. In a temporary directory try this:
+
+```
+/path/to/opt-fuzz --fewconsts --promote=64 --one-func-per-file --width=64 --num-insns=1
+```
+
+This should produce no output on the command line, and it should leave
+a bunch of IR files in the current directory. Right now 1224 files are
+produced, but this can change at any time as opt-fuzz is modified.
+
+Next, test all of these files:
+
+```
+ls *.ll | parallel /path/to/check-file.pl
+```
+
+This will use all your cores and will take a little while. When it
+finishes, the `output` subdirectory should contain as many `.log`
+files as you had IR files to start out with. For every log file that
+does not contain the text `1 correct transformations`, something went
+wrong. You will probably want some programmatic help in categorizing
+these so they can be looked at efficiently. We have not written that
+part yet.

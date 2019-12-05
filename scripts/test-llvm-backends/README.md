@@ -28,11 +28,14 @@ ninja
 ninja check
 ```
 
+Also make sure you ended up with an executable called `alive-tv`, this
+is the one you actually need.
+
 # Build Anvill
 
 Follow external instructions to do this. You must end up with an
-executable called anvill-decompile-json-10.0 (or similar if you use an
-LLMV version other than 10).
+executable called `anvill-decompile-json-10.0` (or something similar
+to this, if you are using an LLVM version other than 10).
 
 # Build opt-fuzz
 
@@ -63,8 +66,38 @@ LLVM, the final LLVM IR is a refinememnt of the original IR:
 ./check-file test1.ll
 ```
 
-If this works, you are all set. If it doesn't work, then some
-necessary tool is either not being found or not working as expected.
+This should not produce much output to the terminal, but instead will
+tell you about the results in a directory called `output`. The file
+`output/test1.log` should contain this text at the end:
+
+```
+----------------------------------------
+define i64 @slice(i64 %0, i64 %1) {
+%2:
+  %3 = add nsw i64 %1, %0
+  ret i64 %3
+}
+=>
+define i64 @slice(i64 %rdi, i64 %rsi) {
+%0:
+  %1 = add i64 %rsi, %rdi
+  ret i64 %1
+}
+Transformation seems to be correct!
+
+Summary:
+  1 correct transformations
+  0 incorrect transformations
+  0 errors
+```
+
+If you see this, then you are all set. The key part of the output is
+`1 correct transformations`. Looking at the IR before and after the
+roundtrip through x86-64, we can see that the two functions actually
+differ: the original code contains the `nsw` qualifier which was
+inserted by Clang because signed overflow is undefined in C. The
+lifted IR, on the other hand, lacks this qualifier because at the CPU
+level the math is two's complement.
 
 # Run a more interesting set of tests
 

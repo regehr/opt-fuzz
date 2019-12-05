@@ -54,18 +54,17 @@ instead.
 
 # Run a simple test
 
-Start with a very simple LLVM function such as this one:
-
-```
-```
-
-Use `check-file.pl` to verify that when it is compiled to x86-64 and
-then decompiled back to LLVM, the final LLVM IR is a refinememnt of
-the original IR:
+Start with a very simple LLVM function such as `test1.ll` which is
+located in the same directory as this README. Use `check-file.pl` to
+verify that when it is compiled to x86-64 and then decompiled back to
+LLVM, the final LLVM IR is a refinememnt of the original IR:
 
 ```
 ./check-file test1.ll
 ```
+
+If this works, you are all set. If it doesn't work, then some
+necessary tool is either not being found or not working as expected.
 
 # Run a more interesting set of tests
 

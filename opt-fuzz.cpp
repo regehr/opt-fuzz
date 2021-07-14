@@ -73,10 +73,9 @@ cl::opt<bool>
                   cl::init(false));
 
 #if LLVM_VERSION_MAJOR >= 10
-cl::opt<bool>
-    GenerateFreeze("generate-freeze",
-                  cl::desc("Generate freeze (default=true)"),
-                  cl::init(true));
+cl::opt<bool> GenerateFreeze("generate-freeze",
+                             cl::desc("Generate freeze (default=true)"),
+                             cl::init(true));
 #endif
 
 cl::opt<std::string>
@@ -353,7 +352,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     A.push_back(genVal(Budget, Width, false));
     T.push_back(A.at(0)->getType());
     Intrinsic::ID ID;
-    switch (Choose(5)) {
+    switch (Choose(6)) {
     case 0:
       ID = Intrinsic::ctpop;
       break;
@@ -374,6 +373,10 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     case 4:
       A.push_back(Builder->getInt1(Choose(2)));
       ID = Intrinsic::cttz;
+      break;
+    case 5:
+      A.push_back(Builder->getInt1(Choose(2)));
+      ID = Intrinsic::abs;
       break;
     }
     Value *V = Builder->CreateIntrinsic(ID, T, A);
@@ -599,7 +602,7 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
   if (UseIntrinsics && Budget > 0 && Width == W && Choose(2)) {
     --Budget;
     Intrinsic::ID ID;
-    switch (Choose(4)) {
+    switch (Choose(10)) {
     case 0:
       ID = Intrinsic::uadd_sat;
       break;
@@ -612,6 +615,24 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     case 3:
       ID = Intrinsic::ssub_sat;
       break;
+    case 4:
+      ID = Intrinsic::smax;
+      break;
+    case 5:
+      ID = Intrinsic::smin;
+      break;
+    case 6:
+      ID = Intrinsic::umax;
+      break;
+    case 7:
+      ID = Intrinsic::umin;
+      break;
+    case 8:
+      ID = Intrinsic::sshl_sat;
+      break;
+    case 9:
+      ID = Intrinsic::ushl_sat;
+      break;
     default:
       llvm::report_fatal_error("oops");
     }
@@ -622,6 +643,8 @@ Value *genVal(int &Budget, int Width, bool ConstOK, bool ArgOK) {
     Vals.push_back(V);
     return V;
   }
+
+  // TODO: add fixed point intrinsics?
 
 #if LLVM_VERSION_MAJOR >= 10
   if (Width == W && GenerateFreeze && Budget > 0 && Choose(2)) {
@@ -873,7 +896,7 @@ void output() {
   legacy::PassManager Passes;
   if (Verify)
     Passes.add(createVerifierPass());
-  Passes.add(createDeadCodeEliminationPass());
+  // Passes.add(createDeadCodeEliminationPass());
   Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
 
@@ -883,7 +906,7 @@ void output() {
   if (OneFuncPerFile) {
     std::stringstream ss;
     ss << BaseName << std::to_string(Id);
-    func.replace(func.find(BaseName), BaseName.length(), "slice");
+    func.replace(func.find(BaseName), BaseName.length(), "f");
     std::string FN = BaseName + std::to_string(Id) + ".ll";
     fd = open(FN.c_str(), O_RDWR | O_CREAT | O_EXCL, S_IREAD | S_IWRITE);
   } else {

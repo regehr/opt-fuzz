@@ -34,6 +34,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar.h"
 #include <algorithm>
 #include <fcntl.h>
@@ -53,96 +54,98 @@ using namespace llvm;
 
 namespace {
 
+llvm::cl::OptionCategory optfuzz_args("Options for opt-fuzz");
+
 cl::opt<int> Cores("cores", cl::desc("How many cores to use (default=1)"),
-                   cl::init(1));
+                   cl::init(1), llvm::cl::cat(optfuzz_args));
 
 cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
-               cl::init(2));
+               cl::init(2), llvm::cl::cat(optfuzz_args));
 
 cl::opt<int> N("num-insns", cl::desc("Number of instructions (default=2)"),
-               cl::init(2));
+               cl::init(2), llvm::cl::cat(optfuzz_args));
 
 cl::opt<int> Promote("promote",
                      cl::desc("Promote narrower arguments and return values to "
                               "this width (default=no promotion)"),
-                     cl::init(-1));
+                     cl::init(-1), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     GenerateUndef("generate-undef",
                   cl::desc("Generate explicit undef inputs (default=false)"),
-                  cl::init(false));
+                  cl::init(false), llvm::cl::cat(optfuzz_args));
 
 #if LLVM_VERSION_MAJOR >= 10
 cl::opt<bool> GenerateFreeze("generate-freeze",
                              cl::desc("Generate freeze (default=true)"),
-                             cl::init(true));
+                             cl::init(true), llvm::cl::cat(optfuzz_args));
 #endif
 
 cl::opt<std::string>
     BaseName("base",
              cl::desc("Base name for emitted functions (default=\"func\")"),
-             cl::init("func"));
+             cl::init("func"), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     ArgsFromMem("args-from-memory",
                 cl::desc("Function arguments come from memory instead of "
                          "calling convention (default=false)"),
-                cl::init(false));
+                cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool> RetToMem("return-to-memory",
                        cl::desc("Function return values go to memory instead "
                                 "of calling convention (default=false)"),
-                       cl::init(false));
+                       cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     Branch("branches",
            cl::desc("Generate branches (default=false) (broken don't use)"),
-           cl::init(false));
+           cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     UseIntrinsics("use-intrinsics",
                   cl::desc("Generate intrinsics like ctpop (default=true)"),
-                  cl::init(true));
+                  cl::init(true), llvm::cl::cat(optfuzz_args));
 
 cl::opt<int> NumFiles("num-files",
                       cl::desc("Number of output files (default=1000)"),
-                      cl::init(1000));
+                      cl::init(1000), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     OneFuncPerFile("one-func-per-file",
                    cl::desc("emit at most one function per output file, "
                             "subsumes --num-files (default=false)"),
-                   cl::init(false));
+                   cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool> OneICmp("oneicmp",
                       cl::desc("Only emit one kind of icmp (default=false)"),
-                      cl::init(false));
+                      cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool> OneBinop("onebinop",
                        cl::desc("Only emit one kind of binop (default=false)"),
-                       cl::init(false));
+                       cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool> NoUB("noub",
                    cl::desc("Do not put UB flags on binops (default=false)"),
-                   cl::init(false));
+                   cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool> RemoveUnusedArgs("remove-unused-args",
                    cl::desc("Remove unused function arguments (default=true)"),
-                   cl::init(true));
+                   cl::init(true), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     Geni1("geni1",
           cl::desc("Functions return i1 instead of iN (default=false)"),
-          cl::init(false));
+          cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     FewConsts("fewconsts",
               cl::desc("Instead of trying all values of every constant, try a "
                        "few selected constants (default=false)"),
-              cl::init(false));
+              cl::init(false), llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool> Verify("verify", cl::desc("Run the LLVM verifier (default=true)"),
-                     cl::init(true));
+                     cl::init(true), llvm::cl::cat(optfuzz_args));
 
 #define MAX_DEPTH 100
 
@@ -894,18 +897,18 @@ redo:
   }
 }
 
-void removeUnusedArgs() {
+void removeDeadArguments() {
 }
 
 void output() {
   std::string SStr;
   raw_string_ostream SS(SStr);
   legacy::PassManager Passes;
+  // Passes.add(createDeadCodeEliminationPass());
   if (RemoveUnusedArgs)
-    removeUnusedArgs();
+    removeDeadArguments();
   if (Verify)
     Passes.add(createVerifierPass());
-  // Passes.add(createDeadCodeEliminationPass());
   Passes.add(createPrintModulePass(SS));
   Passes.run(*M);
 

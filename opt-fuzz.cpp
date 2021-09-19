@@ -126,6 +126,10 @@ cl::opt<bool> NoUB("noub",
                    cl::desc("Do not put UB flags on binops (default=false)"),
                    cl::init(false));
 
+cl::opt<bool> RemoveUnusedArgs("remove-unused-args",
+                   cl::desc("Remove unused function arguments (default=true)"),
+                   cl::init(true));
+
 cl::opt<bool>
     Geni1("geni1",
           cl::desc("Functions return i1 instead of iN (default=false)"),
@@ -890,10 +894,15 @@ redo:
   }
 }
 
+void removeUnusedArgs() {
+}
+
 void output() {
   std::string SStr;
   raw_string_ostream SS(SStr);
   legacy::PassManager Passes;
+  if (RemoveUnusedArgs)
+    removeUnusedArgs();
   if (Verify)
     Passes.add(createVerifierPass());
   // Passes.add(createDeadCodeEliminationPass());

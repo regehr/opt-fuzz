@@ -36,6 +36,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 #include <algorithm>
 #include <fcntl.h>
 #include <pthread.h>
@@ -59,8 +60,8 @@ llvm::cl::OptionCategory optfuzz_args("Options for opt-fuzz");
 cl::opt<int> Cores("cores", cl::desc("How many cores to use (default=1)"),
                    cl::init(1), llvm::cl::cat(optfuzz_args));
 
-cl::opt<int> W("width", cl::desc("Base integer width (default=2)"),
-               cl::init(2), llvm::cl::cat(optfuzz_args));
+cl::opt<int> W("width", cl::desc("Base integer width (default=2)"), cl::init(2),
+               llvm::cl::cat(optfuzz_args));
 
 cl::opt<int> N("num-insns", cl::desc("Number of instructions (default=2)"),
                cl::init(2), llvm::cl::cat(optfuzz_args));
@@ -129,9 +130,10 @@ cl::opt<bool> NoUB("noub",
                    cl::desc("Do not put UB flags on binops (default=false)"),
                    cl::init(false), llvm::cl::cat(optfuzz_args));
 
-cl::opt<bool> RemoveUnusedArgs("remove-unused-args",
-                   cl::desc("Remove unused function arguments (default=true)"),
-                   cl::init(true), llvm::cl::cat(optfuzz_args));
+cl::opt<bool> RemoveUnusedArgs(
+    "remove-unused-args",
+    cl::desc("Remove unused function arguments (default=true)"), cl::init(true),
+    llvm::cl::cat(optfuzz_args));
 
 cl::opt<bool>
     Geni1("geni1",
@@ -898,6 +900,30 @@ redo:
 }
 
 void removeDeadArguments() {
+  std::vector<Function *> Funcs;
+  for (auto &F : *M)
+      Funcs.push_back(&F);
+
+  for (auto *F : Funcs) {
+    ValueToValueMapTy VMap;
+    std::vector<WeakVH> InstToDelete;
+    for (auto &A : F->args())
+      if (!A.hasNUsesOrMore(1))
+        VMap[&A] = UndefValue::get(A.getType());
+    
+    // No arguments to reduce
+    if (VMap.empty())
+      continue;
+
+    auto *ClonedFunc = CloneFunction(F, VMap);
+    ClonedFunc->removeFromParent();
+    M->getFunctionList().insertAfter(F->getIterator(), ClonedFunc);
+
+    std::string FName = std::string(F->getName());
+    F->eraseFromParent();
+    ClonedFunc->setName(FName);
+  }
+
 }
 
 void output() {

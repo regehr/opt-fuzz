@@ -76,11 +76,14 @@ cl::opt<bool>
                   cl::desc("Generate explicit undef inputs (default=false)"),
                   cl::init(false), llvm::cl::cat(optfuzz_args));
 
-#if LLVM_VERSION_MAJOR >= 10
+cl::opt<bool>
+    ARM64("arm64",
+          cl::desc("Set target triple and datalayout for AArch64 (default=false)"),
+          cl::init(false), llvm::cl::cat(optfuzz_args));
+
 cl::opt<bool> GenerateFreeze("generate-freeze",
                              cl::desc("Generate freeze (default=true)"),
                              cl::init(true), llvm::cl::cat(optfuzz_args));
-#endif
 
 cl::opt<std::string>
     BaseName("base",
@@ -798,7 +801,10 @@ void addArg(Value *a, int W, std::vector<Type *> &ArgsTy) {
 
 void generate() {
   M = new Module("", C);
-  M->setTargetTriple("aarch64");
+  if (ARM64) {
+    M->setTargetTriple("aarch64-unknown-linux-gnu");
+    M->setDataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
+  }
   std::vector<Type *> ArgsTy, RealArgsTy, MT;
   for (int i = 0; i < N + 2; ++i) {
     makeArg(W, ArgsTy, RealArgsTy);

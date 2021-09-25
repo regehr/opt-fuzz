@@ -798,6 +798,7 @@ void addArg(Value *a, int W, std::vector<Type *> &ArgsTy) {
 
 void generate() {
   M = new Module("", C);
+  M->setTargetTriple("aarch64");
   std::vector<Type *> ArgsTy, RealArgsTy, MT;
   for (int i = 0; i < N + 2; ++i) {
     makeArg(W, ArgsTy, RealArgsTy);
@@ -902,16 +903,17 @@ redo:
 void removeDeadArguments() {
   std::vector<Function *> Funcs;
   for (auto &F : *M)
+    if (!F.arg_empty() && !F.isIntrinsic())
       Funcs.push_back(&F);
 
   for (auto *F : Funcs) {
     ValueToValueMapTy VMap;
     std::vector<WeakVH> InstToDelete;
     for (auto &A : F->args())
-      if (!A.hasNUsesOrMore(1))
+      if (A.getNumUses() < 1)
         VMap[&A] = UndefValue::get(A.getType());
     
-    // No arguments to reduce
+    // No arguments to remove
     if (VMap.empty())
       continue;
 
@@ -919,7 +921,7 @@ void removeDeadArguments() {
     ClonedFunc->removeFromParent();
     M->getFunctionList().insertAfter(F->getIterator(), ClonedFunc);
 
-    std::string FName = std::string(F->getName());
+    auto FName = std::string(F->getName());
     F->eraseFromParent();
     ClonedFunc->setName(FName);
   }

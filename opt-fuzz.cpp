@@ -297,7 +297,7 @@ std::vector<Value *> gen3(int &Budget, int Width) {
   auto C = genVal(Budget, Width,
                   (!isa<Constant>(A) && !isa<UndefValue>(A)) ||
                       (!isa<Constant>(B) && !isa<UndefValue>(B)));
-  switch (rand() % 5) {
+  switch (rand() % 6) {
   case 0:
     return std::vector{A, B, C};
   case 1:
